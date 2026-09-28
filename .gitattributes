@@ -1,0 +1,17 @@
+# Keep Unix line endings for files that run on GitHub's Linux build servers
+# (Windows Git would otherwise convert them and the Android build fails).
+* text=auto
+gradlew text eol=lf
+*.sh text eol=lf
+*.gradle text eol=lf
+*.yml text eol=lf
+*.bat text eol=crlf
+*.keystore binary
+*.jar binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
+*.woff2 binary
+*.ttf binary
+*.db binary

@@ -1,0 +1,12 @@
+{
+  "name": "NUMMAT - Think. Match. Clear.",
+  "short_name": "NUMMAT",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#3a8dde",
+  "icons": [
+    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

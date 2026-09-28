@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+instance/
+.pytest_cache/
+build/
+dist/
+*.spec
+NUMMAT Game/
+Output/
+mobile/node_modules/
+mobile/www/
+dist-apk/

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="classic">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#3a8dde" />
+  <meta name="description" content="NUMMAT - an adaptive number-matching puzzle. Think. Match. Clear." />
+  <title>NUMMAT - Think. Match. Clear.</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}" />
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png') }}" />
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/nummat.css') }}" />
+</head>
+<body>
+  <div id="backdrop" aria-hidden="true"></div>
+  <canvas id="particles" aria-hidden="true"></canvas>
+
+  <!-- ================= HEADER ================= -->
+  <header id="topbar">
+    <button class="brand" data-go="play" aria-label="NUMMAT home">
+      <img class="brand-icon" src="{{ url_for('static', filename='icon-192.png') }}" alt="" width="40" height="40" />
+      <span class="brand-text">
+        <span class="logo">NUMMAT</span>
+        <span class="tagline">Think. Match. Clear.</span>
+      </span>
+    </button>
+    <nav id="topnav" aria-label="Main">
+      <button data-go="play" class="nav-btn active">Play</button>
+      <button data-go="daily" class="nav-btn">Daily</button>
+      <button data-go="lab" class="nav-btn">Solver Lab</button>
+      <button data-go="stats" class="nav-btn">Stats</button>
+      <button data-go="ranks" class="nav-btn">Leaderboard</button>
+      <button data-go="store" class="nav-btn">Store</button>
+    </nav>
+    <div class="top-right">
+      <button class="pill coin-pill" data-go="store" title="Coins"><span aria-hidden="true">🪙</span> <b id="coin-count">0</b></button>
+      <button class="icon-btn" id="theme-btn" title="Theme" aria-haspopup="true" aria-expanded="false">🎨</button>
+      <button class="icon-btn" id="mode-btn" title="Light / dark">🌗</button>
+      <button class="avatar-btn" id="avatar-btn" title="Account"><span id="avatar-initial">G</span></button>
+    </div>
+    <div id="theme-pop" class="popover" hidden>
+      <div class="pop-title">Theme</div>
+      <div class="theme-options"></div>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- ================= PLAY ================= -->
+    <section id="view-play" class="view active" aria-label="Play">
+      <div class="hero-grid">
+        <article class="card profile-card" id="profile-card"></article>
+        <article class="card adaptive-card" id="adaptive-card"></article>
+      </div>
+
+      <h2 class="section-title">Game modes</h2>
+      <div class="modes-grid" id="modes-grid"></div>
+
+      <h2 class="section-title">Level packs</h2>
+      <div class="packs-grid" id="packs-grid"></div>
+
+      <article class="card lab-teaser">
+        <div>
+          <h3>🧠 Can this board be solved?</h3>
+          <p class="muted">Type any board into the Solver Lab and watch the search algorithm find a full clear - or prove there isn't one.</p>
+        </div>
+        <button class="btn" data-go="lab">Open Solver Lab</button>
+      </article>
+    </section>
+
+    <!-- ================= GAME ================= -->
+    <section id="view-game" class="view" aria-label="Game">
+      <div class="game-layout">
+        <div class="game-main">
+          <div class="game-head">
+            <div>
+              <div class="game-title" id="game-title">Classic</div>
+              <div class="game-sub" id="game-sub"></div>
+            </div>
+            <span class="badge" id="diff-badge">EASY</span>
+          </div>
+
+          <div class="hud" id="hud">
+            <div class="hud-item" id="hud-score"><span class="hud-label">Score</span><span class="hud-value" id="h-score">0</span></div>
+            <div class="hud-item"><span class="hud-label">Streak</span><span class="hud-value" id="h-streak">0</span></div>
+            <div class="hud-item" id="hud-moves"><span class="hud-label" id="h-moves-label">Moves</span><span class="hud-value" id="h-moves">0</span></div>
+            <div class="hud-item" id="hud-time"><span class="hud-label" id="h-time-label">Time</span><span class="hud-value" id="h-time">0:00</span></div>
+          </div>
+
+          <div class="meter-row">
+            <div class="meter" aria-label="Streak meter"><div class="meter-fill" id="streak-fill"></div></div>
+            <div class="chain-meter" id="chain-meter" hidden>🔗 Chain <b id="chain-count">0</b></div>
+            <div class="shield-pill" id="shield-pill" hidden>🔥 Shield</div>
+          </div>
+
+          <div id="stuck-banner" class="banner danger" hidden>
+            <span>🔒 Deadlock - no moves left.</span>
+            <div class="banner-actions">
+              <button class="btn small" id="stuck-undo">↩ Undo</button>
+              <button class="btn small ghost" id="stuck-end">End run</button>
+            </div>
+          </div>
+
+          <div class="board-wrap">
+            <div id="board" class="board" role="grid" aria-label="Game board"></div>
+            <div id="solution-bar" class="solution-bar" hidden>
+              <span id="solution-step">Move 1 / 7</span>
+              <button class="btn small ghost" id="sol-prev" aria-label="Previous">◀</button>
+              <button class="btn small" id="sol-play">▶ Play</button>
+              <button class="btn small ghost" id="sol-next" aria-label="Next">▶▶</button>
+              <button class="btn small ghost" id="sol-close">✕ Close</button>
+            </div>
+          </div>
+
+          <div id="toast-line" class="toast-line" aria-live="polite"></div>
+
+          <div class="actions" id="actions">
+            <button class="btn action" id="a-hint" title="Show a possible pair"><span>💡</span><em>Hint <small id="hint-count"></small></em></button>
+            <button class="btn action ghost" id="a-why" title="Explain the hinted pair"><span>❓</span><em>Why?</em></button>
+            <button class="btn action ghost" id="a-best" title="Optimal move (solver)"><span>🎯</span><em>Best move</em></button>
+            <button class="btn action ghost" id="a-undo" title="Undo"><span>↩</span><em>Undo <small id="undo-count"></small></em></button>
+            <button class="btn action ghost" id="a-solve" title="Can this board be solved?"><span>🧠</span><em>Solve</em></button>
+            <button class="btn action ghost" id="a-items" title="Use an item"><span>🎒</span><em>Items</em></button>
+            <button class="btn action ghost" id="a-restart" title="Restart"><span>🔄</span><em>Restart</em></button>
+            <button class="btn action ghost" id="a-exit" title="Back to menu"><span>🏠</span><em>Menu</em></button>
+          </div>
+        </div>
+
+        <aside class="game-side">
+          <article class="card explain-card" id="explain-card">
+            <h3>Why this worked</h3>
+            <div id="explain-body" class="muted">Make a match and NUMMAT explains it here: the rule, the connection, how many new options it opened and what it did to your streak.</div>
+          </article>
+          <article class="card hint-card" id="hint-card" hidden>
+            <h3 id="hint-title">💡 Hint</h3>
+            <div id="hint-body"></div>
+          </article>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ================= DAILY ================= -->
+    <section id="view-daily" class="view" aria-label="Daily challenge">
+      <div class="daily-grid">
+        <article class="card daily-card" id="daily-card"></article>
+        <article class="card">
+          <h3>Today's scoreboard</h3>
+          <div id="daily-board"></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ================= LAB ================= -->
+    <section id="view-lab" class="view" aria-label="Solver lab">
+      <div class="lab-grid">
+        <article class="card">
+          <h2 class="card-title">🧠 Solver Lab</h2>
+          <p class="muted">Enter a board - one row per line. Digits 1-9, <code>.</code> for empty, <code>#</code> for a wall, <code>*</code> for a wildcard.</p>
+          <textarea id="lab-input" rows="7" spellcheck="false" aria-label="Board input">9 9 7 7 # .
+8 2 4 8 2 .
+# 4 5 2 2 9
+1 8 * 6 4 8
+9 9 2 . 5 .</textarea>
+          <div class="row gap">
+            <button class="btn" id="lab-run">Analyze board</button>
+            <button class="btn ghost" id="lab-example">Random example</button>
+            <button class="btn ghost" id="lab-current" hidden>Use current game</button>
+          </div>
+        </article>
+        <article class="card" id="lab-result">
+          <h3>Result</h3>
+          <p class="muted">Run the solver to see whether a full clear exists, the number of moves, an estimated difficulty and the board metrics the generator uses.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ================= STATS ================= -->
+    <section id="view-stats" class="view" aria-label="Player analytics">
+      <div class="stats-top">
+        <article class="card profile-table" id="profile-table"></article>
+        <article class="card" id="skill-panel"></article>
+      </div>
+      <h2 class="section-title">Performance over time</h2>
+      <div class="charts-grid" id="charts"></div>
+      <div class="stats-bottom">
+        <article class="card" id="mode-table"></article>
+        <article class="card" id="tier-bars"></article>
+      </div>
+      <h2 class="section-title">Achievements <span class="muted small" id="ach-count"></span></h2>
+      <div id="achievements"></div>
+    </section>
+
+    <!-- ================= RANKS ================= -->
+    <section id="view-ranks" class="view" aria-label="Leaderboard">
+      <article class="card">
+        <div class="row between wrap">
+          <h2 class="card-title">🏆 Global leaderboard</h2>
+          <div class="tabs" role="tablist" id="rank-tabs">
+            <button role="tab" data-period="daily">Daily</button>
+            <button role="tab" data-period="weekly">Weekly</button>
+            <button role="tab" data-period="all" class="active">All-time</button>
+          </div>
+        </div>
+        <div id="rank-table"></div>
+      </article>
+    </section>
+
+    <!-- ================= STORE ================= -->
+    <section id="view-store" class="view" aria-label="Store">
+      <article class="card store-head">
+        <div>
+          <h2 class="card-title">NUMMAT Store</h2>
+          <p class="muted">Coins are earned only by playing - clearing levels, the daily challenge and achievements. Items are disabled in the Daily Challenge, so rankings stay fair.</p>
+        </div>
+        <div class="store-balance"><span>🪙</span> <b id="store-coins">0</b> <small>coins</small></div>
+      </article>
+      <div class="store-grid" id="store-grid"></div>
+    </section>
+  </main>
+
+  <!-- ================= MOBILE BOTTOM NAV ================= -->
+  <nav id="bottomnav" aria-label="Main">
+    <button data-go="play" class="active"><span>🎮</span>Play</button>
+    <button data-go="daily"><span>📅</span>Daily</button>
+    <button data-go="ranks"><span>🏆</span>Ranks</button>
+    <button data-go="stats"><span>📊</span>Stats</button>
+    <button data-go="store"><span>🛒</span>Store</button>
+  </nav>
+
+  <!-- ================= MODAL ================= -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <div class="modal-head">
+        <h2 id="modal-title">Title</h2>
+        <button class="icon-btn" id="modal-close" aria-label="Close">✕</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- ================= WHO'S PLAYING? (login gate) ================= -->
+  <div id="gate" class="gate" hidden>
+    <div class="gate-card" role="dialog" aria-modal="true" aria-labelledby="gate-title">
+      <img class="gate-logo" src="{{ url_for('static', filename='icon-192.png') }}" alt="" width="84" height="84" />
+      <div class="logo gate-wordmark">NUMMAT</div>
+      <div class="tagline">Think. Match. Clear.</div>
+      <div id="gate-body"></div>
+    </div>
+  </div>
+
+  <!-- ================= NEW-PLAYER TOUR ================= -->
+  <div id="tour" class="tour" hidden>
+    <div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+      <div class="tour-top">
+        <div class="tour-dots" id="tour-dots"></div>
+        <button class="btn small ghost" id="tour-skip">Skip tour</button>
+      </div>
+      <div id="tour-body" class="tour-body"></div>
+      <div class="tour-nav">
+        <button class="btn ghost" id="tour-back">← Back</button>
+        <button class="btn" id="tour-next">Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+
+  <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/effects.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

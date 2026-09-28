@@ -1,0 +1,9 @@
+{
+  "appId": "com.nummat.game",
+  "appName": "NUMMAT",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#f4f7fb",
+    "allowMixedContent": false
+  }
+}

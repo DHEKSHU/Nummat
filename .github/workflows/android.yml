@@ -1,30 +1,73 @@
-name: Android CI
+# Builds the NUMMAT Android app (APK) on GitHub's servers.
+#
+# Runs automatically on every push to main, or manually:
+#   GitHub repo -> Actions -> "Build Android APK" -> Run workflow
+# When it finishes, open the run and download "NUMMAT-android" under Artifacts.
+# Pushing a tag like v2.1 also attaches the APK to a GitHub Release.
+name: Build Android APK
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  build:
-
+  apk:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
-    - name: set up JDK 11
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        
+      - uses: actions/checkout@v4
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-    - name: Build with Gradle
-      run: ./gradlew build
-    - name: Build apk
-  # You may pin to the exact commit or the version.
-  # uses: MirkoMajkicProductDock/BuildAPK@24cc2d17f0c8e391166603bffe50f207b9d75859
-      uses: MirkoMajkicProductDock/BuildAPK@v0.0.1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Assemble the game files (same UI as desktop + on-device engine)
+        run: python scripts/build_mobile.py
+
+      - name: Test the JavaScript engine
+        run: node --test mobile/tests/*.test.js
+
+      - name: Install Capacitor
+        working-directory: mobile
+        run: npm ci || npm install
+
+      - name: Copy the game into the Android project
+        working-directory: mobile
+        run: npx cap sync android
+
+      - name: Build APK
+        working-directory: mobile/android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          sed -i 's/\r$//' gradlew          # Windows line endings would stop gradlew from starting
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          mkdir -p ../../dist-apk
+          cp app/build/outputs/apk/release/app-release.apk ../../dist-apk/NUMMAT.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NUMMAT-android
+          path: dist-apk/NUMMAT.apk
+
+      - name: Attach to a release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-apk/NUMMAT.apk

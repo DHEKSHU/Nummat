@@ -1,0 +1,32 @@
+{
+  "completed": {
+    "default": [
+      "default_001"
+    ]
+  },
+  "stats": {
+    "total_matches": 8,
+    "highest_streak": 8,
+    "total_time_played": 0,
+    "levels_completed": 1,
+    "total_moves": 8
+  },
+  "achievements": [
+    "first_match",
+    "streak_5",
+    "speed_demon",
+    "perfectionist"
+  ],
+  "coins": 197,
+  "powerups": {
+    "shuffle": 2,
+    "auto_match": 0,
+    "multiplier": 0
+  },
+  "best_times": {
+    "default_001": 33.455305337905884
+  },
+  "best_moves": {
+    "default_001": 8
+  }
+}

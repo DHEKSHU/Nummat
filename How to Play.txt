@@ -1,0 +1,43 @@
+NUMMAT - Think. Match. Clear.
+=============================
+
+START
+  Double-click NUMMAT.exe. Keep NUMMAT.exe and the _internal folder together.
+  Your players and progress are saved in the "saves" folder here, so copying
+  this whole folder to another computer (or a pen drive) takes your progress along.
+
+PLAYERS
+  First time: create a player (a PIN is optional) or play as Guest.
+  NUMMAT remembers who played last and logs them in automatically.
+  To change player: click your avatar (top right) -> Switch player.
+
+RULES
+  Clear the board by matching pairs of tiles:
+    * equal numbers         5 and 5
+    * numbers that make 10  3 and 7, 1 and 9, 2 and 8, 4 and 6
+  The two tiles must be connected by a clear line - only empty cells in between:
+    * same row   * same column   * diagonal
+    * row wrap: the last tile of a row joins the first tile of the next row
+  Tap one tile, then its partner - or drag from one to the other.
+
+GAME MODES
+  Classic      the original, plus 6 themed level packs
+  Chain        play a pair your last match opened to grow a chain multiplier
+  Time Attack  as many matches as you can in 2 minutes
+  Daily        one puzzle a day, the same for everyone - 20 moves, no hints
+  Zen          no timer, no score, unlimited undo and hints
+  Expert       walls, frozen tiles, wildcards (★ matches anything)
+
+HELP WHILE PLAYING
+  Hint (3 levels) - Why? - Best move - Undo - Solve (checks if the board can be cleared)
+  The "Why this worked" panel explains every match you make.
+
+Replay the tour any time: avatar menu -> How to play.
+
+PROBLEMS?
+  * "Windows protected your PC"  ->  click More info -> Run anyway.
+  * Unzip first (right-click the zip -> Extract All) - don't run it from inside the zip.
+  * If NUMMAT opens in an Edge window instead of its own, that's fine - it is the
+    automatic backup mode for PCs where the normal window can't start.
+  * Still stuck? Right-click the downloaded zip -> Properties -> tick "Unblock" -> OK,
+    then extract again. Details of any start-up problem are in saves\nummat.log.

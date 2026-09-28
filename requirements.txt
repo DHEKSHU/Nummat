@@ -1,0 +1,9 @@
+Flask>=3.0
+Flask-SQLAlchemy>=3.1
+SQLAlchemy>=2.0
+Werkzeug>=3.0
+pytest>=8.0
+Pillow>=10.0        # icon generation (scripts/make_icon.py)
+# desktop app only:
+# pywebview>=5.0
+# pyinstaller>=6.10

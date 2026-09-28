@@ -1,0 +1,77 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace = "com.nummat.game"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.nummat.game"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // GitHub Actions passes its run number so every new APK can update the previous one
+        versionCode((System.getenv("VERSION_CODE") ?: "1").toInteger())
+        versionName "2.0." + (System.getenv("VERSION_CODE") ?: "0")
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    // One shared signing key (app/debug.keystore) so a newer APK installs over an older one.
+    // For the Play Store, create your own private key and set NUMMAT_KEYSTORE / NUMMAT_KEYSTORE_PASSWORD /
+    // NUMMAT_KEY_ALIAS / NUMMAT_KEY_PASSWORD (e.g. as GitHub secrets) - see mobile/README.md.
+    signingConfigs {
+        debug {
+            storeFile file("debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+        release {
+            def ks = System.getenv("NUMMAT_KEYSTORE")
+            storeFile ks ? file(ks) : file("debug.keystore")
+            storePassword ks ? System.getenv("NUMMAT_KEYSTORE_PASSWORD") : "android"
+            keyAlias ks ? System.getenv("NUMMAT_KEY_ALIAS") : "androiddebugkey"
+            keyPassword ks ? System.getenv("NUMMAT_KEY_PASSWORD") : "android"
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
