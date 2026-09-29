@@ -6,7 +6,10 @@ Cell values
     0   empty (already cleared)
    -1   blocked cell  - a permanent wall; never matchable, blocks every path
   1-9   number tiles
-   11   wildcard (★) - matches any number tile
+   11   wildcard / rainbow (★) - matches any number tile
+ +100   power-up flag on a number tile (value % 100 is the number):
+        1xx 💣 bomb       - when matched, also clears the 8 surrounding tiles
+        2xx ➖ row-clear  - when matched, also clears its whole row
 
 Two tiles can be matched when
   * the values are equal, or sum to 10 (or one of them is a wildcard), and
@@ -27,6 +30,10 @@ from typing import Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 EMPTY = 0
 BLOCKED = -1
 WILD = 11
+BOMB = 1          # power codes (value // 100)
+ROW_CLEAR = 2
+POWER_NAMES = {BOMB: "bomb", ROW_CLEAR: "row"}
+POWER_ICONS = {BOMB: "💣", ROW_CLEAR: "➖"}
 
 Pos = Tuple[int, int]
 Grid = List[List[int]]
@@ -47,7 +54,18 @@ def is_tile(v: int) -> bool:
     return v > 0
 
 
+def base(v: int) -> int:
+    """The number on a tile, without any power-up flag."""
+    return v % 100 if v > 0 else v
+
+
+def power(v: int) -> int:
+    """0 = plain tile, 1 = bomb, 2 = row-clear."""
+    return v // 100 if v > 0 else 0
+
+
 def label(v: int) -> str:
+    v = base(v)
     if v == WILD:
         return "★"
     if v == BLOCKED:
@@ -59,6 +77,7 @@ def can_match(a: int, b: int) -> bool:
     """Value rule: equal numbers, numbers that sum to 10, or a wildcard."""
     if a <= 0 or b <= 0:
         return False
+    a, b = base(a), base(b)
     if a == WILD or b == WILD:
         return True
     return a == b or a + b == 10
@@ -66,6 +85,7 @@ def can_match(a: int, b: int) -> bool:
 
 def match_reason(a: int, b: int) -> str:
     """Short human explanation of *why* two values match."""
+    a, b = base(a), base(b)
     if a == WILD or b == WILD:
         other = b if a == WILD else a
         return f"★ is a wildcard and matches {label(other)}"
@@ -176,13 +196,96 @@ def thaw_neighbours(frozen: Iterable[Pos], cleared: Iterable[Pos], rows: int, co
     return sorted(frozen_set)
 
 
-def apply_move(grid: Sequence[Sequence[int]], frozen: Iterable[Pos], p1: Pos, p2: Pos) -> Tuple[Grid, List[Pos]]:
-    """Return a *new* (grid, frozen) after clearing p1 and p2 (no validation)."""
+def collapse_rows(grid: Grid, frozen: Iterable[Pos]):
+    """Remove rows that are completely empty (classic Number Match).
+
+    Returns (grid, frozen, removed_row_indices). Never removes every row.
+    """
+    removed = [r for r, row in enumerate(grid) if all(v == EMPTY for v in row)]
+    if not removed or len(removed) == len(grid):
+        return grid, sorted(map(tuple, frozen)), []
+    keep = [row for r, row in enumerate(grid) if r not in set(removed)]
+    shift = lambda r: r - sum(1 for x in removed if x < r)
+    new_frozen = sorted((shift(r), c) for (r, c) in frozen if r not in set(removed))
+    return keep, new_frozen, removed
+
+
+def remap_row(r: int, removed: Sequence[int]) -> int:
+    return r - sum(1 for x in removed if x < r)
+
+
+def apply_move_detailed(grid, frozen, p1: Pos, p2: Pos, collapse: bool = False) -> dict:
+    """Clear p1 and p2, fire any power-ups (chain reactions included), thaw
+    neighbours and optionally collapse empty rows.
+
+    Returns {grid, frozen, cleared, powers, rows_removed}; `cleared` and
+    `powers` use coordinates from *before* rows were collapsed.
+    """
     g = copy_grid(grid)
-    g[p1[0]][p1[1]] = EMPTY
-    g[p2[0]][p2[1]] = EMPTY
     rows, cols = len(g), len(g[0])
-    return g, thaw_neighbours(frozen, (tuple(p1), tuple(p2)), rows, cols)
+    cleared: List[Pos] = []
+    fired: List[Tuple[str, Pos]] = []
+    queue = [tuple(p1), tuple(p2)]
+    while queue:
+        r, c = queue.pop(0)
+        v = g[r][c]
+        if v <= 0:
+            continue
+        g[r][c] = EMPTY
+        cleared.append((r, c))
+        pw = power(v)
+        if pw == BOMB:
+            fired.append(("bomb", (r, c)))
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    rr, cc = r + dr, c + dc
+                    if (dr or dc) and 0 <= rr < rows and 0 <= cc < cols and g[rr][cc] > 0:
+                        queue.append((rr, cc))
+        elif pw == ROW_CLEAR:
+            fired.append(("row", (r, c)))
+            queue.extend((r, cc) for cc in range(cols) if g[r][cc] > 0)
+    new_frozen = thaw_neighbours([p for p in frozen if tuple(p) not in set(cleared)], cleared, rows, cols)
+    removed: List[int] = []
+    if collapse:
+        g, new_frozen, removed = collapse_rows(g, new_frozen)
+    return {"grid": g, "frozen": [tuple(p) for p in new_frozen], "cleared": cleared,
+            "powers": fired, "rows_removed": removed}
+
+
+def apply_move(grid: Sequence[Sequence[int]], frozen: Iterable[Pos], p1: Pos, p2: Pos,
+               collapse: bool = False) -> Tuple[Grid, List[Pos]]:
+    """Return a *new* (grid, frozen) after the move (no validation)."""
+    d = apply_move_detailed(grid, list(frozen), p1, p2, collapse)
+    return d["grid"], d["frozen"]
+
+
+def add_rows(grid, max_rows: int = 40) -> Optional[Tuple[Grid, List[Pos]]]:
+    """Classic "+" rule: copy every remaining number (reading order, power-ups
+    stripped) onto the end of the board, continuing after the last tile.
+
+    Returns (new_grid, positions_added) or None if the board would get too tall.
+    """
+    cols = len(grid[0])
+    values = [base(v) for row in grid for v in row if v > 0]
+    if not values:
+        return None
+    g = copy_grid(grid)
+    last = max(r * cols + c for r, row in enumerate(g) for c, v in enumerate(row) if v != EMPTY)
+    idx, added = last + 1, []
+    for v in values:
+        while True:
+            r, c = divmod(idx, cols)
+            if r >= len(g):
+                if len(g) >= max_rows:
+                    return None
+                g.append([EMPTY] * cols)
+            if g[r][c] == EMPTY:
+                break
+            idx += 1
+        g[r][c] = v
+        added.append((r, c))
+        idx += 1
+    return g, added
 
 
 def validate_move(grid: Sequence[Sequence[int]], frozen: Iterable[Pos], p1: Pos, p2: Pos) -> Tuple[bool, str, Optional[str]]:

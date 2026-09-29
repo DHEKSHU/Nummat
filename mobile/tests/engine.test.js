@@ -65,3 +65,31 @@ test('on-device API: players, games, progress', async () => {
   assert.ok((await API.request('/api/auth/login', { username: 'tester', password: '0000' })).needs_pin);
   assert.ok((await API.request('/api/auth/login', { username: 'tester', password: '1234' })).success);
 });
+
+test('power-ups, collapsing rows and the + button', () => {
+  assert.ok(E.canMatch(105, 5) && E.base(207) === 7 && E.power(207) === 2);
+  let d = E.applyMoveDetailed([[1, 2, 3], [4, 105, 6], [7, 8, 209]], [], [1, 1], [0, 1]);
+  assert.strictEqual(E.tilesLeft(d.grid), 0);                        // bomb chains into the row-clear
+  d = E.applyMoveDetailed([[3, 7, 0], [0, 0, 0], [4, 6, 1]], [[2, 2]], [0, 0], [0, 1], true);
+  assert.deepStrictEqual(d.grid, [[4, 6, 1]]);
+  assert.deepStrictEqual(E.addRows([[1, 0, 3], [0, 205, 0]])[0], [[1, 0, 3], [0, 205, 1], [3, 5, 0]]);
+  const lvl = (grid) => ({ grid, frozen: [], seed: 1, metrics: {}, difficulty: 'EASY', difficulty_score: 10 });
+  const st = E.newState('classic', lvl([[3, 7], [4, 5]]), {});
+  const ev = E.playMove(st, [0, 0], [0, 1]);
+  assert.strictEqual(ev.deadlock, 'add_needed');
+  assert.ok(E.addNumbers(st).success && !st.needs_add);
+  assert.strictEqual(E.addInfo(st).free_left, 1);
+  const zen = E.newState('zen', lvl([[3, 7, 1, 2]]), {});
+  assert.strictEqual(E.playMove(zen, [0, 0], [0, 1]).deadlock, 'auto_added');
+});
+
+test('+ costs coins after the free ones (on-device API)', async () => {
+  await API.request('/api/auth/register', { username: 'Adder' });
+  let r = await API.request('/api/games', { mode: 'classic' });
+  const gid = r.game_id;
+  for (let i = 0; i < 2; i++) { r = await API.request(`/api/games/${gid}/add`, {}); assert.ok(r.event.success && !r.event.coins_spent); }
+  const coins = r.profile.coins;
+  r = await API.request(`/api/games/${gid}/add`, {});
+  assert.strictEqual(r.event.coins_spent, 50);
+  assert.strictEqual(r.profile.coins, coins - 50);
+});

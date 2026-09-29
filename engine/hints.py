@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Sequence
 
-from .rules import WILD, Pos, apply_move, connection, find_pairs, label, match_reason, pair_key
+from .rules import (POWER_ICONS, WILD, Pos, apply_move_detailed, base, connection, find_pairs, label, match_reason,
+                    pair_key, power, remap_row)
 from .solver import best_move
 
 CONNECTION_TEXT = {
@@ -20,11 +21,19 @@ CONNECTION_TEXT = {
 }
 
 
-def _new_options(grid, frozen, p1: Pos, p2: Pos):
-    before = {pair_key(a, b) for a, b, _ in find_pairs(grid, frozen)}
-    g2, f2 = apply_move(grid, frozen, p1, p2)
-    after = {pair_key(a, b) for a, b, _ in find_pairs(g2, f2)}
-    return before, after, after - before, g2, f2
+def _new_options(grid, frozen, p1: Pos, p2: Pos, collapse: bool = False):
+    """Pairs before / after a move. Rows may collapse, so 'before' pairs are mapped
+    into the new coordinates to work out which pairs the move genuinely opened."""
+    before_pairs = find_pairs(grid, frozen)
+    d = apply_move_detailed(grid, list(frozen), p1, p2, collapse)
+    cleared, removed = set(d["cleared"]), d["rows_removed"]
+    mapped = set()
+    for a, b, _ in before_pairs:
+        if a in cleared or b in cleared:
+            continue
+        mapped.add(pair_key((remap_row(a[0], removed), a[1]), (remap_row(b[0], removed), b[1])))
+    after = {pair_key(a, b) for a, b, _ in find_pairs(d["grid"], d["frozen"])}
+    return {pair_key(a, b) for a, b, _ in before_pairs}, after, after - mapped, d
 
 
 def _easiest_pair(grid, frozen):
@@ -35,17 +44,23 @@ def _easiest_pair(grid, frozen):
     def rank(p):
         (r1, c1), (r2, c2), kind = p
         dist = max(abs(r1 - r2), abs(c1 - c2))
-        return (kind == "wrap", dist, grid[r1][c1] == WILD or grid[r2][c2] == WILD)
+        return (kind == "wrap", dist, base(grid[r1][c1]) == WILD or base(grid[r2][c2]) == WILD)
     return min(pairs, key=rank)
 
 
-def explain_pair(grid, frozen, p1: Pos, p2: Pos) -> Dict:
+POWER_TEXT = {1: "💣 It's a bomb - it also clears the tiles around it.",
+              2: "➖ It's a row-clear - it also clears its whole row."}
+
+
+def explain_pair(grid, frozen, p1: Pos, p2: Pos, collapse: bool = False) -> Dict:
     a, b = grid[p1[0]][p1[1]], grid[p2[0]][p2[1]]
     conn = connection(grid, p1, p2)
-    before, after, unlocked, _, _ = _new_options(grid, frozen, p1, p2)
+    before, after, unlocked, _ = _new_options(grid, frozen, p1, p2, collapse)
     lines = [f"Tiles {label(a)} and {label(b)} can be matched because {match_reason(a, b)}."]
     if conn:
         lines.append(f"They are connected: {CONNECTION_TEXT[conn]}.")
+    for v in {power(a), power(b)} - {0}:
+        lines.append(POWER_TEXT[v])
     if unlocked:
         n = len(unlocked)
         lines.append(f"This move also opens {n} additional matching possibilit{'y' if n == 1 else 'ies'}.")
@@ -55,15 +70,16 @@ def explain_pair(grid, frozen, p1: Pos, p2: Pos) -> Dict:
             "options_before": len(before), "options_after": len(after)}
 
 
-def hint(grid, frozen, level: int, reuse_pair: Optional[Sequence[Pos]] = None, solver_budget: int = 6000) -> Optional[Dict]:
+def hint(grid, frozen, level: int, reuse_pair: Optional[Sequence[Pos]] = None, solver_budget: int = 6000,
+         collapse: bool = False) -> Optional[Dict]:
     frozen = [tuple(p) for p in frozen]
     level = max(1, min(3, int(level)))
     if level == 3:
-        move, reason, res = best_move(grid, frozen, budget=solver_budget)
+        move, reason, res = best_move(grid, frozen, budget=solver_budget, collapse=collapse)
         if move is None:
             return None
         p1, p2 = move
-        info = explain_pair(grid, frozen, p1, p2)
+        info = explain_pair(grid, frozen, p1, p2, collapse)
         if reason == "keeps_solvable":
             info["text"].append(f"Solver: this is the first step of a full clear ({res.moves_to_clear} moves).")
         else:
@@ -80,20 +96,25 @@ def hint(grid, frozen, level: int, reuse_pair: Optional[Sequence[Pos]] = None, s
     if level == 1:
         return {"level": 1, "pair": [list(p1), list(p2)], "title": "Try these two tiles.",
                 "text": ["Try these two tiles."], "unlocks": None}
-    return {"level": 2, "pair": [list(p1), list(p2)], "title": "Why this works", **explain_pair(grid, frozen, p1, p2)}
+    return {"level": 2, "pair": [list(p1), list(p2)], "title": "Why this works",
+            **explain_pair(grid, frozen, p1, p2, collapse)}
 
 
 def explain_move(grid_before, frozen_before, p1: Pos, p2: Pos, conn: str,
-                 streak_before: int, streak_after: int, chain: int = 0) -> Dict:
-    """'Explain This Move' - returned with every successful match."""
+                 streak_before: int, streak_after: int, chain: int = 0, collapse: bool = False) -> Dict:
+    """'Explain This Move' - returned with every successful match (plus the move's full outcome)."""
     a, b = grid_before[p1[0]][p1[1]], grid_before[p2[0]][p2[1]]
-    before, after, unlocked, _, _ = _new_options(grid_before, frozen_before, p1, p2)
+    before, after, unlocked, d = _new_options(grid_before, frozen_before, p1, p2, collapse)
     delta = len(after) - len(before)          # how the move changed the number of options
     return {
+        "outcome": d,
+        "powers": [{"type": t, "pos": list(p), "icon": POWER_ICONS[1 if t == "bomb" else 2]} for t, p in d["powers"]],
+        "extra_cleared": len(d["cleared"]) - 2,
+        "rows_removed": len(d["rows_removed"]),
         "values": [label(a), label(b)],
         "rule": match_reason(a, b),
-        "sum_to_10": a + b == 10 and WILD not in (a, b),
-        "equal": a == b,
+        "sum_to_10": base(a) + base(b) == 10 and WILD not in (base(a), base(b)),
+        "equal": base(a) == base(b),
         "connection": conn,
         "same_row": p1[0] == p2[0],
         "same_column": p1[1] == p2[1],

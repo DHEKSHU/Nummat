@@ -20,7 +20,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Iterable, List, Optional, Sequence, Tuple
 
-from .rules import WILD, Pos, apply_move, find_pairs, is_cleared, tiles_left
+from .rules import WILD, Pos, apply_move, base, find_pairs, is_cleared, power, tiles_left
 
 DEFAULT_BUDGET = 25_000
 
@@ -63,7 +63,7 @@ def values_pairable(grid) -> bool:
     for row in grid:
         for v in row:
             if v > 0:
-                counts[v] += 1
+                counts[base(v)] += 1
     odd = counts[5] % 2
     for n in range(1, 5):
         odd += (counts[n] + counts[10 - n]) % 2
@@ -71,24 +71,29 @@ def values_pairable(grid) -> bool:
     return odd <= wild and (wild - odd) % 2 == 0
 
 
+def has_powers(grid) -> bool:
+    return any(power(v) for row in grid for v in row)
+
+
 def _state_key(grid: Sequence[Sequence[int]], frozen: Iterable[Pos]) -> tuple:
-    return (tuple(v for row in grid for v in row), tuple(sorted(map(tuple, frozen))))
+    return (len(grid), tuple(v for row in grid for v in row), tuple(sorted(map(tuple, frozen))))
 
 
-def _ordered_moves(grid, frozen):
+def _ordered_moves(grid, frozen, collapse: bool = False):
     """Legal moves, best first: most follow-up options, then avoid spending wildcards."""
     pairs = find_pairs(grid, frozen)
     scored = []
     for p1, p2, _ in pairs:
-        g2, f2 = apply_move(grid, frozen, p1, p2)
+        g2, f2 = apply_move(grid, frozen, p1, p2, collapse)
         mobility = len(find_pairs(g2, f2))
-        uses_wild = (grid[p1[0]][p1[1]] == WILD) + (grid[p2[0]][p2[1]] == WILD)
+        uses_wild = (base(grid[p1[0]][p1[1]]) == WILD) + (base(grid[p2[0]][p2[1]]) == WILD)
         scored.append((-(mobility + (0 if not is_cleared(g2) else 1000)), uses_wild, p1, p2, g2, f2))
     scored.sort(key=lambda t: (t[0], t[1]))
     return pairs, scored
 
 
-def solve(grid: Sequence[Sequence[int]], frozen: Iterable[Pos] = (), budget: int = DEFAULT_BUDGET) -> SolveResult:
+def solve(grid: Sequence[Sequence[int]], frozen: Iterable[Pos] = (), budget: int = DEFAULT_BUDGET,
+          collapse: bool = False) -> SolveResult:
     frozen = [tuple(p) for p in frozen]
     result = SolveResult(solvable=None, moves_to_clear=tiles_left(grid) // 2)
     if is_cleared(grid):
@@ -96,8 +101,11 @@ def solve(grid: Sequence[Sequence[int]], frozen: Iterable[Pos] = (), budget: int
         result.reason = "The board is already clear."
         return result
     n_tiles = tiles_left(grid)
-    root_pairable = values_pairable(grid)
-    if n_tiles % 2:
+    powered = has_powers(grid)                  # power-ups remove extra tiles: parity rules don't apply
+    root_pairable = values_pairable(grid) and not powered
+    if powered:
+        pass
+    elif n_tiles % 2:
         result.reason = f"Odd number of tiles ({n_tiles}) - one tile can never be matched."
     elif not root_pairable:
         result.reason = "The numbers cannot all be paired (equal or sum-to-10), whatever the layout."
@@ -124,7 +132,7 @@ def solve(grid: Sequence[Sequence[int]], frozen: Iterable[Pos] = (), budget: int
         if nodes > budget:
             exhausted = True
             return False
-        pairs, ordered = _ordered_moves(g, f)
+        pairs, ordered = _ordered_moves(g, f, collapse)
         for _, _, p1, p2, g2, f2 in ordered:
             path.append((p1, p2))
             branching.append(len(pairs))
@@ -151,24 +159,25 @@ def solve(grid: Sequence[Sequence[int]], frozen: Iterable[Pos] = (), budget: int
     return result
 
 
-def best_move(grid, frozen=(), budget: int = 8_000):
+def best_move(grid, frozen=(), budget: int = 8_000, collapse: bool = False):
     """The move a strong player would make now.
 
     Returns (move, reason) where reason is 'keeps_solvable' (first step of a
     verified full-clear line) or 'max_mobility' (no clear line found within
     budget; this move leaves the most options open).
     """
-    res = solve(grid, frozen, budget=budget)
+    res = solve(grid, frozen, budget=budget, collapse=collapse)
     if res.solvable and res.path:
         return res.path[0], "keeps_solvable", res
-    pairs, ordered = _ordered_moves(grid, [tuple(p) for p in frozen])
+    pairs, ordered = _ordered_moves(grid, [tuple(p) for p in frozen], collapse)
     if not ordered:
         return None, "no_moves", res
     _, _, p1, p2, _, _ = ordered[0]
     return (p1, p2), "max_mobility", res
 
 
-def random_playout(grid, frozen=(), rng: Optional[random.Random] = None, max_steps: int = 500):
+def random_playout(grid, frozen=(), rng: Optional[random.Random] = None, max_steps: int = 500,
+                   collapse: bool = False):
     """Play uniformly random legal moves until stuck. Returns (cleared, depth)."""
     rng = rng or random.Random()
     g = [list(r) for r in grid]
@@ -181,6 +190,6 @@ def random_playout(grid, frozen=(), rng: Optional[random.Random] = None, max_ste
         if not pairs:
             return False, depth
         p1, p2, _ = rng.choice(pairs)
-        g, f = apply_move(g, f, p1, p2)
+        g, f = apply_move(g, f, p1, p2, collapse)
         depth += 1
     return is_cleared(g), depth

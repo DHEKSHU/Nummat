@@ -32,6 +32,9 @@ class ModeConfig:
     items_allowed: bool = True
     solver_allowed: bool = True
     ranked: bool = True                # counts toward leaderboards
+    adds_free: Optional[int] = 2       # free "+" (add numbers) per game; None = unlimited
+    auto_add: bool = False             # add numbers automatically when stuck (Zen, Time Attack)
+    collapse: bool = True              # empty rows disappear (classic Number Match)
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -40,7 +43,7 @@ class ModeConfig:
 MODES: Dict[str, ModeConfig] = {
     "classic": ModeConfig(
         "classic", "Classic", "🎯", "The original.",
-        "Match equal numbers (5 ↔ 5) or numbers that add to 10 (3 + 7). Clear the board.",
+        "Match equal numbers (5 ↔ 5) or numbers that add to 10 (3 + 7). Stuck? Tap ➕ to add numbers.",
         hints=3, undos=3),
     "chain": ModeConfig(
         "chain", "Chain", "🔗", "Think several moves ahead.",
@@ -50,20 +53,20 @@ MODES: Dict[str, ModeConfig] = {
     "time_attack": ModeConfig(
         "time_attack", "Time Attack", "⏱️", "02:00 on the clock.",
         "Find as many matches as possible in two minutes. Cleared boards are replaced instantly.",
-        hints=1, undos=0, time_limit=120, endless=True, solver_allowed=False),
+        hints=1, undos=0, time_limit=120, endless=True, solver_allowed=False, adds_free=None, auto_add=True),
     "daily": ModeConfig(
         "daily", "Daily Challenge", "📅", "Same puzzle for everyone.",
         "One seeded board per day. 20 moves - every attempt counts. No hints, no items, global scoreboard.",
         hints=0, undos=0, move_limit=20, inject_on_deadlock=False, items_allowed=False,
-        solver_allowed=False),
+        solver_allowed=False, adds_free=0, collapse=False),
     "zen": ModeConfig(
         "zen", "Zen", "🧘", "No timer. No pressure.",
         "No timer, no score, unlimited undo and hints. Just solve.",
-        hints=None, undos=None, show_score=False, ranked=False),
+        hints=None, undos=None, show_score=False, ranked=False, adds_free=None, auto_add=True),
     "expert": ModeConfig(
         "expert", "Expert", "💀", "Walls, ice and wildcards.",
-        "Blocked cells, frozen tiles, wildcards, one undo, one hint. A deadlock ends the run.",
-        hints=1, undos=1, inject_on_deadlock=False),
+        "Blocked cells, frozen tiles, wildcards and power-ups. One undo, one hint, one free ➕.",
+        hints=1, undos=1, inject_on_deadlock=False, adds_free=1, collapse=False),
 }
 
 
@@ -119,26 +122,27 @@ def spec_for(mode: str, skill: float, pack: Optional[str] = None, level_index: O
             spec.blocked = max(2, size // 2)
         if special == "wild" or (special == "mixed" and level_index % 3 == 0):
             spec.wild = 1 + (size >= 6)
+        spec.powers = 0 if size < 6 else (1 if size < 8 else 2)
         return spec
 
     if mode == "classic":           # adaptive quick play
         rec = recommendation or {}
         rows, cols = board_dims(rec.get("grid", 5))
         return LevelSpec(rows=rows, cols=cols, fill=1.0, target=rec.get("tier", "MEDIUM"),
-                         frozen=rec.get("frozen", 0), blocked=rec.get("blocked", 0))
+                         frozen=rec.get("frozen", 0), blocked=rec.get("blocked", 0), powers=rec.get("powers", 0))
     if mode == "chain":
         rows, cols = board_dims(5 if skill < 4 else 6 if skill < 7 else 7)
         return LevelSpec(rows=rows, cols=cols, fill=1.0, low_first_moves=True,
-                         target="MEDIUM" if skill < 6 else "HARD")
+                         target="MEDIUM" if skill < 6 else "HARD", powers=1)
     if mode == "time_attack":
         return LevelSpec(rows=4, cols=5, fill=1.0, target="EASY" if skill < 5 else "MEDIUM",
                          max_attempts=4, rollouts=8)
     if mode == "daily":
         return LevelSpec(rows=6, cols=7, fill=1.0, blocked=2, target="HARD")
     if mode == "zen":
-        return LevelSpec(rows=6, cols=6, fill=1.0, target="EASY" if skill < 4 else "MEDIUM")
+        return LevelSpec(rows=6, cols=6, fill=1.0, target="EASY" if skill < 4 else "MEDIUM", powers=1)
     if mode == "expert":
-        return LevelSpec(rows=7, cols=7, fill=1.0, blocked=5, frozen=5, wild=1, target="EXPERT")
+        return LevelSpec(rows=7, cols=7, fill=1.0, blocked=5, frozen=5, wild=1, target="EXPERT", powers=2)
     raise ValueError(f"unknown mode {mode}")
 
 
