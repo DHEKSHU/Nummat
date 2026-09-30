@@ -8,7 +8,6 @@ Games           POST /api/games                         start (mode, pack, level
                 GET  /api/games/<id>                    state (also finalises timed-out games)
                 POST /api/games/<id>/move               {a: [r, c], b: [r, c]}
                 POST /api/games/<id>/undo
-                POST /api/games/<id>/add                "+": add numbers (2 free, then 50 coins)
                 POST /api/games/<id>/hint               {level: 1 | 2 | 3}
                 POST /api/games/<id>/solve              {reveal: bool}
                 POST /api/games/<id>/item               {item}
@@ -330,17 +329,6 @@ def undo(game_id):
     state = game.state
     event = S.undo(state)
     game.set_state(state)
-    return game_payload(user, game, event=event)
-
-
-@bp.post("/games/<int:game_id>/add")
-def add(game_id):
-    """The "+" button: copy the remaining numbers onto the end of the board."""
-    user = current_user()
-    game = game_or_404(user, game_id)
-    if not game:
-        return err("Game not found.", 404)
-    event = svc.add_numbers(user, game)
     return game_payload(user, game, event=event)
 
 

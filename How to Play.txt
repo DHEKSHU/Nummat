@@ -19,18 +19,6 @@ RULES
     * same row   * same column   * diagonal
     * row wrap: the last tile of a row joins the first tile of the next row
   Tap one tile, then its partner - or drag from one to the other.
-  When a row is completely empty it disappears and the board slides up (+25).
-
-POWER TILES
-  Bomb (small bomb badge)    match it and the 8 tiles around it are cleared too
-  Row clear (minus badge)    match it and its whole row is cleared
-  Power tiles can set each other off. Every extra tile they clear is +20.
-
-NO PAIRS LEFT?  Tap + Add
-  Every number still on the board is copied onto new rows at the bottom.
-  The first 2 adds in a game are free, then each costs 50 coins.
-  Long boards scroll - swipe up and down on the board.
-  (Time Attack and Zen add for you. The Daily Challenge has no adds - use Undo.)
 
 GAME MODES
   Classic      the original, plus 6 themed level packs
@@ -41,7 +29,7 @@ GAME MODES
   Expert       walls, frozen tiles, wildcards (★ matches anything)
 
 HELP WHILE PLAYING
-  Hint (3 levels) - Why? - Best move - + Add - Undo - Solve (checks if the board can be cleared)
+  Hint (3 levels) - Why? - Best move - Undo - Solve (checks if the board can be cleared)
   The "Why this worked" panel explains every match you make.
 
 Replay the tour any time: avatar menu -> How to play.

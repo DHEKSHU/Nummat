@@ -24,7 +24,7 @@ from engine.generator import LevelSpec, generate_level, seed_from, stars_for
 from engine.modes import (MODES, PACK_BY_ID, PACK_UNLOCK_REQUIREMENT, PACKS, board_dims, pack_level_size, par_time,
                           spec_for)
 
-LEVEL_VERSION = "v3"   # bump when board generation changes, so cached boards are regenerated
+LEVEL_VERSION = "v2"   # bump when board generation changes, so cached boards are regenerated
 from engine.predictor import DifficultyModel, features_from_games
 from models import (Achievement, DailyChallenge, Game, Level, Move, PlayerStats, User, UserAchievement, db,
                     utcnow)
@@ -389,13 +389,9 @@ def _in(grid, p) -> bool:
 
 def award(user: User, ids: List[str]) -> List[Dict]:
     out = []
-    have = set(unlocked_ids(user))
     for aid in ids:
-        if aid in have:          # already awarded (e.g. earlier in this same request)
-            continue
-        have.add(aid)
         a = ach_engine.BY_ID[aid]
-        user.achievements.append(UserAchievement(user_id=user.id, achievement_id=aid))
+        db.session.add(UserAchievement(user_id=user.id, achievement_id=aid))
         user.coins += a["reward"]
         out.append(ach_engine.public(a))
     return out
@@ -516,24 +512,6 @@ def buy(user: User, item_id: str) -> Tuple[bool, str]:
     user.set_inventory(inv)
     db.session.commit()
     return True, f"Purchased {item['name']}!"
-
-
-def add_numbers(user: User, game: Game) -> Dict:
-    """The "+" button: free adds first, then S.ADD_COST coins each."""
-    state = game.state
-    info = S.add_info(state)
-    if info["cost"] is None:
-        return {"success": False, "message": "Adding numbers isn't allowed in this mode."}
-    if info["cost"] and user.coins < info["cost"]:
-        return {"success": False, "message": f"You need {info['cost']} coins to add numbers "
-                                             f"({info['cost'] - user.coins} more). Try Undo or a Shuffle.",
-                "needs_coins": True}
-    event = S.add_numbers(state, paid=bool(info["cost"]))
-    if event.get("success") and info["cost"]:
-        user.coins -= info["cost"]
-        event["coins_spent"] = info["cost"]
-    game.set_state(state)
-    return event
 
 
 def consume_item(user: User, item_id: str) -> bool:

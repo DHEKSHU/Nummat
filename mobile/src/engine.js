@@ -16,27 +16,21 @@
   'use strict';
 
   // =========================================================== rules =====
-  const EMPTY = 0, BLOCKED = -1, WILD = 11, BOMB = 1, ROW_CLEAR = 2;
-  const POWER_ICONS = { 1: '💣', 2: '➖' };
-  // Power-up tiles store their number in value % 100: 1xx = bomb, 2xx = row-clear.
-  const base = (v) => v > 0 ? v % 100 : v;
-  const power = (v) => v > 0 ? Math.floor(v / 100) : 0;
+  const EMPTY = 0, BLOCKED = -1, WILD = 11;
   const FORWARD = [[[0, 1], 'row'], [[1, 0], 'column'], [[1, 1], 'diagonal'], [[1, -1], 'diagonal']];
   const ALL_DIRS = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
 
   const key = (p) => p[0] + ',' + p[1];
   const copyGrid = (g) => g.map(r => r.slice());
-  const label = (v) => { v = base(v); return v === WILD ? '★' : v === BLOCKED ? '■' : v ? String(v) : '·'; };
+  const label = (v) => v === WILD ? '★' : v === BLOCKED ? '■' : v ? String(v) : '·';
 
   function canMatch(a, b) {
     if (a <= 0 || b <= 0) return false;
-    a = base(a); b = base(b);
     if (a === WILD || b === WILD) return true;
     return a === b || a + b === 10;
   }
 
   function matchReason(a, b) {
-    a = base(a); b = base(b);
     if (a === WILD || b === WILD) return `★ is a wildcard and matches ${label(a === WILD ? b : a)}`;
     if (a === b && a + b === 10) return `${a} = ${b} and ${a} + ${b} = 10`;
     if (a === b) return `${a} = ${b} (equal numbers)`;
@@ -100,69 +94,10 @@
       .sort((x, y) => x[0] - y[0] || x[1] - y[1]);
   }
 
-  /** Remove completely empty rows (never all of them). Returns [grid, frozen, removedRows]. */
-  function collapseRows(g, frozen) {
-    const removed = [];
-    g.forEach((row, r) => { if (row.every(v => v === EMPTY)) removed.push(r); });
-    if (!removed.length || removed.length === g.length) return [g, frozen, []];
-    const rm = new Set(removed);
-    const shift = (r) => r - removed.filter(x => x < r).length;
-    return [g.filter((_, r) => !rm.has(r)), frozen.filter(p => !rm.has(p[0])).map(p => [shift(p[0]), p[1]]), removed];
-  }
-  const remapRow = (r, removed) => r - removed.filter(x => x < r).length;
-
-  /** Clear p1/p2, fire power-ups (with chain reactions), thaw neighbours, optionally collapse empty rows. */
-  function applyMoveDetailed(g0, frozen, p1, p2, collapse = false) {
-    let g = copyGrid(g0);
-    const rows = g.length, cols = g[0].length, cleared = [], fired = [];
-    const queue = [[p1[0], p1[1]], [p2[0], p2[1]]];
-    while (queue.length) {
-      const [r, c] = queue.shift(), v = g[r][c];
-      if (v <= 0) continue;
-      g[r][c] = EMPTY; cleared.push([r, c]);
-      const pw = power(v);
-      if (pw === BOMB) {
-        fired.push(['bomb', [r, c]]);
-        for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
-          const rr = r + dr, cc = c + dc;
-          if ((dr || dc) && rr >= 0 && rr < rows && cc >= 0 && cc < cols && g[rr][cc] > 0) queue.push([rr, cc]);
-        }
-      } else if (pw === ROW_CLEAR) {
-        fired.push(['row', [r, c]]);
-        for (let cc = 0; cc < cols; cc++) if (g[r][cc] > 0) queue.push([r, cc]);
-      }
-    }
-    const clearedSet = new Set(cleared.map(key));
-    let f = thaw((frozen || []).filter(p => !clearedSet.has(key(p))), cleared), removed = [];
-    if (collapse) [g, f, removed] = collapseRows(g, f);
-    return { grid: g, frozen: f, cleared, powers: fired, rows_removed: removed };
-  }
-  function applyMove(g, frozen, p1, p2, collapse = false) {
-    const d = applyMoveDetailed(g, frozen, p1, p2, collapse);
-    return [d.grid, d.frozen];
-  }
-
-  /** Classic "+": copy every remaining number (reading order, power-ups stripped) after the last tile. */
-  function addRows(grid, maxRows = 40) {
-    const cols = grid[0].length, values = [];
-    grid.forEach(row => row.forEach(v => { if (v > 0) values.push(base(v)); }));
-    if (!values.length) return null;
-    const g = copyGrid(grid);
-    let last = -1;
-    g.forEach((row, r) => row.forEach((v, c) => { if (v !== EMPTY) last = Math.max(last, r * cols + c); }));
-    let idx = last + 1;
-    const added = [];
-    for (const v of values) {
-      for (;;) {
-        const r = Math.floor(idx / cols), c = idx % cols;
-        if (r >= g.length) { if (g.length >= maxRows) return null; g.push(new Array(cols).fill(EMPTY)); }
-        if (g[r][c] === EMPTY) break;
-        idx++;
-      }
-      const r = Math.floor(idx / cols), c = idx % cols;
-      g[r][c] = v; added.push([r, c]); idx++;
-    }
-    return [g, added];
+  function applyMove(g, frozen, p1, p2) {
+    const n = copyGrid(g);
+    n[p1[0]][p1[1]] = EMPTY; n[p2[0]][p2[1]] = EMPTY;
+    return [n, thaw(frozen, [p1, p2])];
   }
 
   function validateMove(g, frozen, p1, p2) {
@@ -231,7 +166,7 @@
   // ========================================================= solver ======
   function valuesPairable(g) {
     const counts = new Array(12).fill(0);
-    for (const row of g) for (const v of row) if (v > 0) counts[base(v)]++;
+    for (const row of g) for (const v of row) if (v > 0) counts[v]++;
     let odd = counts[5] % 2;
     for (let n = 1; n <= 4; n++) odd += (counts[n] + counts[10 - n]) % 2;
     const wild = counts[WILD];
@@ -239,27 +174,25 @@
   }
 
   const stateKey = (g, f) => g.map(r => r.join(',')).join(';') + '|' + f.map(key).sort().join(';');
-  const hasPowers = (g) => g.some(r => r.some(v => power(v) > 0));
 
-  function orderedMoves(g, f, collapse = false) {
+  function orderedMoves(g, f) {
     const pairs = findPairs(g, f);
     const scored = pairs.map(([p1, p2]) => {
-      const [g2, f2] = applyMove(g, f, p1, p2, collapse);
+      const [g2, f2] = applyMove(g, f, p1, p2);
       const mobility = findPairs(g2, f2).length;
-      const usesWild = (base(g[p1[0]][p1[1]]) === WILD) + (base(g[p2[0]][p2[1]]) === WILD);
+      const usesWild = (g[p1[0]][p1[1]] === WILD) + (g[p2[0]][p2[1]] === WILD);
       return { s: -(mobility + (isCleared(g2) ? 1000 : 0)), w: usesWild, p1, p2, g2, f2 };
     });
     scored.sort((a, b) => a.s - b.s || a.w - b.w);
     return [pairs, scored];
   }
 
-  function solve(grid, frozen = [], budget = 25000, collapse = false) {
+  function solve(grid, frozen = [], budget = 25000) {
     frozen = (frozen || []).map(p => [p[0], p[1]]);
     const res = { solvable: null, path: [], nodes: 0, moves_to_clear: Math.floor(tilesLeft(grid) / 2), branching: [], best_path: [], reason: '' };
     if (isCleared(grid)) { res.solvable = true; res.reason = 'The board is already clear.'; return finishSolve(res); }
-    const n = tilesLeft(grid), powered = hasPowers(grid), rootPairable = valuesPairable(grid) && !powered;
-    if (powered) { /* power-ups remove extra tiles - parity rules don't apply */ }
-    else if (n % 2) res.reason = `Odd number of tiles (${n}) - one tile can never be matched.`;
+    const n = tilesLeft(grid), rootPairable = valuesPairable(grid);
+    if (n % 2) res.reason = `Odd number of tiles (${n}) - one tile can never be matched.`;
     else if (!rootPairable) res.reason = 'The numbers cannot all be paired (equal or sum-to-10), whatever the layout.';
     const dead = new Set();
     let nodes = 0, exhausted = false;
@@ -271,7 +204,7 @@
       if (dead.has(k)) return false;
       if (rootPairable && !valuesPairable(g)) { dead.add(k); return false; }
       if (++nodes > budget) { exhausted = true; return false; }
-      const [pairs, ordered] = orderedMoves(g, f, collapse);
+      const [pairs, ordered] = orderedMoves(g, f);
       for (const m of ordered) {
         path.push([m.p1, m.p2]); branching.push(pairs.length);
         if (dfs(m.g2, m.f2)) return true;
@@ -295,22 +228,22 @@
     return res;
   }
 
-  function bestMove(grid, frozen = [], budget = 8000, collapse = false) {
-    const res = solve(grid, frozen, budget, collapse);
+  function bestMove(grid, frozen = [], budget = 8000) {
+    const res = solve(grid, frozen, budget);
     if (res.solvable && res.path.length) return [res.path[0], 'keeps_solvable', res];
-    const [, ordered] = orderedMoves(grid, frozen || [], collapse);
+    const [, ordered] = orderedMoves(grid, frozen || []);
     if (!ordered.length) return [null, 'no_moves', res];
     return [[ordered[0].p1, ordered[0].p2], 'max_mobility', res];
   }
 
-  function randomPlayout(grid, frozen, rng, maxSteps = 500, collapse = false) {
+  function randomPlayout(grid, frozen, rng, maxSteps = 500) {
     let g = copyGrid(grid), f = (frozen || []).map(p => [p[0], p[1]]), depth = 0;
     while (depth < maxSteps) {
       if (isCleared(g)) return [true, depth];
       const pairs = findPairs(g, f);
       if (!pairs.length) return [false, depth];
       const [p1, p2] = rng.choice(pairs);
-      [g, f] = applyMove(g, f, p1, p2, collapse);
+      [g, f] = applyMove(g, f, p1, p2);
       depth++;
     }
     return [isCleared(g), depth];
@@ -321,7 +254,7 @@
   const TIER_THRESHOLDS = [[24, 'EASY'], [40, 'MEDIUM'], [55, 'HARD']];
 
   function levelSpec(o = {}) {
-    return Object.assign({ rows: 5, cols: 5, fill: 1.0, blocked: 0, frozen: 0, wild: 0, powers: 0, target: null,
+    return Object.assign({ rows: 5, cols: 5, fill: 1.0, blocked: 0, frozen: 0, wild: 0, target: null,
       low_first_moves: false, max_attempts: 10, rollouts: 16, solve_budget: 400 }, o);
   }
 
@@ -409,14 +342,6 @@
     return probe.solvable ? probe : null;
   }
 
-  /** Turn `count` plain tiles into power-ups (alternating bomb / row-clear). In place. */
-  function addPowers(g, frozen, count, rng) {
-    if (count <= 0) return;
-    const fz = new Set((frozen || []).map(key)), tiles = [];
-    g.forEach((row, r) => row.forEach((v, c) => { if (v > 0 && v < 100 && v !== WILD && !fz.has(r + ',' + c)) tiles.push([r, c]); }));
-    rng.sample(tiles, Math.min(count, tiles.length)).forEach(([r, c], i) => { g[r][c] += 100 * [BOMB, ROW_CLEAR][(i + rng.randrange(2)) % 2]; });
-  }
-
   function addFrozen(g, count, rng) {
     const tiles = [];
     g.forEach((row, r) => row.forEach((v, c) => { if (v > 0 && v !== WILD) tiles.push([r, c]); }));
@@ -424,7 +349,7 @@
   }
 
   function validate(grid, frozen, spec) {
-    const values = grid.flat().map(base), tiles = values.filter(v => v > 0);
+    const values = grid.flat(), tiles = values.filter(v => v > 0);
     if (values.some(v => v !== EMPTY && v !== BLOCKED && v !== WILD && !(v >= 1 && v <= 9))) return [false, 'illegal cell value'];
     if (tiles.length % 2) return [false, 'odd number of tiles'];
     if (tiles.length < 4) return [false, 'too few tiles'];
@@ -508,11 +433,9 @@
       const [grid, path] = reverseBuild(plain, rng, 0.3);
       const res = knownSolution(grid, [], path, 500);
       const metrics = measure(grid, [], rng, spec.rollouts, res);
-      addPowers(grid, [], spec.powers, rng);
       return { grid, frozen: [], seed, metrics, difficulty: metrics.difficulty, difficulty_score: metrics.difficulty_score, attempts, solution: res.path };
     }
     best[1].attempts = attempts;
-    addPowers(best[1].grid, best[1].frozen, spec.powers, rng);   // verified solvable first; power-ups only remove extra tiles
     return best[1];
   }
 
@@ -535,16 +458,15 @@
   // ========================================================== modes ======
   const mode = (id, name, icon, tagline, description, hints, undos, extra = {}) => Object.assign({
     id, name, icon, tagline, description, hints, undos, time_limit: null, move_limit: null, inject_on_deadlock: true,
-    endless: false, chain: false, show_score: true, items_allowed: true, solver_allowed: true, ranked: true,
-    adds_free: 2, auto_add: false, collapse: true }, extra);
+    endless: false, chain: false, show_score: true, items_allowed: true, solver_allowed: true, ranked: true }, extra);
 
   const MODES = {
-    classic: mode('classic', 'Classic', '🎯', 'The original.', 'Match equal numbers (5 ↔ 5) or numbers that add to 10 (3 + 7). Stuck? Tap ➕ to add numbers.', 3, 3),
+    classic: mode('classic', 'Classic', '🎯', 'The original.', 'Match equal numbers (5 ↔ 5) or numbers that add to 10 (3 + 7). Clear the board.', 3, 3),
     chain: mode('chain', 'Chain', '🔗', 'Think several moves ahead.', 'Every match can open new lines. Play a pair your last match unlocked to grow the chain and multiply your score.', 2, 2, { chain: true }),
-    time_attack: mode('time_attack', 'Time Attack', '⏱️', '02:00 on the clock.', 'Find as many matches as possible in two minutes. Cleared boards are replaced instantly.', 1, 0, { time_limit: 120, endless: true, solver_allowed: false, adds_free: null, auto_add: true }),
-    daily: mode('daily', 'Daily Challenge', '📅', 'Same puzzle for everyone.', 'One seeded board per day. 20 moves - every attempt counts. No hints, no items, daily scoreboard.', 0, 0, { move_limit: 20, inject_on_deadlock: false, items_allowed: false, solver_allowed: false, adds_free: 0, collapse: false }),
-    zen: mode('zen', 'Zen', '🧘', 'No timer. No pressure.', 'No timer, no score, unlimited undo and hints. Just solve.', null, null, { show_score: false, ranked: false, adds_free: null, auto_add: true }),
-    expert: mode('expert', 'Expert', '💀', 'Walls, ice and wildcards.', 'Blocked cells, frozen tiles, wildcards and power-ups. One undo, one hint, one free ➕.', 1, 1, { inject_on_deadlock: false, adds_free: 1, collapse: false }),
+    time_attack: mode('time_attack', 'Time Attack', '⏱️', '02:00 on the clock.', 'Find as many matches as possible in two minutes. Cleared boards are replaced instantly.', 1, 0, { time_limit: 120, endless: true, solver_allowed: false }),
+    daily: mode('daily', 'Daily Challenge', '📅', 'Same puzzle for everyone.', 'One seeded board per day. 20 moves - every attempt counts. No hints, no items, daily scoreboard.', 0, 0, { move_limit: 20, inject_on_deadlock: false, items_allowed: false, solver_allowed: false }),
+    zen: mode('zen', 'Zen', '🧘', 'No timer. No pressure.', 'No timer, no score, unlimited undo and hints. Just solve.', null, null, { show_score: false, ranked: false }),
+    expert: mode('expert', 'Expert', '💀', 'Walls, ice and wildcards.', 'Blocked cells, frozen tiles, wildcards, one undo, one hint. A deadlock ends the run.', 1, 1, { inject_on_deadlock: false }),
   };
 
   const PACKS = [
@@ -574,19 +496,18 @@
       if (sp === 'frozen' || (sp === 'mixed' && levelIndex % 3 === 1)) spec.frozen = Math.max(2, Math.floor(size / 2));
       if (sp === 'blocked' || (sp === 'mixed' && levelIndex % 3 === 2)) spec.blocked = Math.max(2, Math.floor(size / 2));
       if (sp === 'wild' || (sp === 'mixed' && levelIndex % 3 === 0)) spec.wild = 1 + (size >= 6 ? 1 : 0);
-      spec.powers = size < 6 ? 0 : size < 8 ? 1 : 2;
       return spec;
     }
     if (m === 'classic') {
       rec = rec || {};
       const [rows, cols] = boardDims(rec.grid || 5);
-      return levelSpec({ rows, cols, fill: 1.0, target: rec.tier || 'MEDIUM', frozen: rec.frozen || 0, blocked: rec.blocked || 0, powers: rec.powers || 0 });
+      return levelSpec({ rows, cols, fill: 1.0, target: rec.tier || 'MEDIUM', frozen: rec.frozen || 0, blocked: rec.blocked || 0 });
     }
-    if (m === 'chain') { const [rows, cols] = boardDims(skill < 4 ? 5 : skill < 7 ? 6 : 7); return levelSpec({ rows, cols, low_first_moves: true, target: skill < 6 ? 'MEDIUM' : 'HARD', powers: 1 }); }
+    if (m === 'chain') { const [rows, cols] = boardDims(skill < 4 ? 5 : skill < 7 ? 6 : 7); return levelSpec({ rows, cols, low_first_moves: true, target: skill < 6 ? 'MEDIUM' : 'HARD' }); }
     if (m === 'time_attack') return levelSpec({ rows: 4, cols: 5, target: skill < 5 ? 'EASY' : 'MEDIUM', max_attempts: 4, rollouts: 8 });
     if (m === 'daily') return levelSpec({ rows: 6, cols: 7, blocked: 2, target: 'HARD' });
-    if (m === 'zen') return levelSpec({ rows: 6, cols: 6, target: skill < 4 ? 'EASY' : 'MEDIUM', powers: 1 });
-    if (m === 'expert') return levelSpec({ rows: 7, cols: 7, blocked: 5, frozen: 5, wild: 1, target: 'EXPERT', powers: 2 });
+    if (m === 'zen') return levelSpec({ rows: 6, cols: 6, target: skill < 4 ? 'EASY' : 'MEDIUM' });
+    if (m === 'expert') return levelSpec({ rows: 7, cols: 7, blocked: 5, frozen: 5, wild: 1, target: 'EXPERT' });
     throw new Error('unknown mode ' + m);
   }
 
@@ -652,7 +573,7 @@
     return { skill: r2(skill, 1), grid: size, rows, cols, fill: 1.0, pairs, tier,
       complexity: { EASY: 'LOW', MEDIUM: 'MEDIUM', HARD: 'HIGH', EXPERT: 'EXTREME' }[tier],
       time: Math.round(pairs * per / 5) * 5, hints: skill < 4 ? 3 : skill < 7 ? 2 : 1,
-      frozen: skill >= 6 ? Math.floor(size / 3) : 0, blocked, powers: size < 6 ? 0 : size < 8 ? 1 : 2 };
+      frozen: skill >= 6 ? Math.floor(size / 3) : 0, blocked };
   }
   function explainAdjustment(games) {
     const rep = performanceReport(games);
@@ -673,44 +594,35 @@
     diagonal: 'they share a clear diagonal',
     wrap: 'the row wraps - the end of one row connects to the start of the next',
   };
-  /** Pairs before/after a move; rows may collapse, so 'before' pairs are mapped to the new coordinates. */
-  function newOptions(g, f, p1, p2, collapse = false) {
-    const beforePairs = findPairs(g, f);
-    const before = new Set(beforePairs.map(([a, b]) => pairKey(a, b)));
-    const d = applyMoveDetailed(g, f, p1, p2, collapse);
-    const cleared = new Set(d.cleared.map(key)), rm = d.rows_removed, mapped = new Set();
-    for (const [a, b] of beforePairs) {
-      if (cleared.has(key(a)) || cleared.has(key(b))) continue;
-      mapped.add(pairKey([remapRow(a[0], rm), a[1]], [remapRow(b[0], rm), b[1]]));
-    }
-    const afterPairs = findPairs(d.grid, d.frozen);
+  function newOptions(g, f, p1, p2) {
+    const before = new Set(findPairs(g, f).map(([a, b]) => pairKey(a, b)));
+    const [g2, f2] = applyMove(g, f, p1, p2);
+    const afterPairs = findPairs(g2, f2);
     const after = new Set(afterPairs.map(([a, b]) => pairKey(a, b)));
-    const unlocked = afterPairs.filter(([a, b]) => !mapped.has(pairKey(a, b))).map(([a, b]) => [a, b]);
-    return [before, after, unlocked, d];
+    const unlocked = afterPairs.filter(([a, b]) => !before.has(pairKey(a, b))).map(([a, b]) => [a, b]);
+    return [before, after, unlocked];
   }
   function easiestPair(g, f) {
     const pairs = findPairs(g, f);
     if (!pairs.length) return null;
-    const rank = ([[r1, c1], [r2, c2], kind]) => [kind === 'wrap' ? 1 : 0, Math.max(Math.abs(r1 - r2), Math.abs(c1 - c2)), (base(g[r1][c1]) === WILD || base(g[r2][c2]) === WILD) ? 1 : 0];
+    const rank = ([[r1, c1], [r2, c2], kind]) => [kind === 'wrap' ? 1 : 0, Math.max(Math.abs(r1 - r2), Math.abs(c1 - c2)), (g[r1][c1] === WILD || g[r2][c2] === WILD) ? 1 : 0];
     return pairs.slice().sort((x, y) => { const a = rank(x), b = rank(y); return a[0] - b[0] || a[1] - b[1] || a[2] - b[2]; })[0];
   }
-  const POWER_TEXT = { 1: "💣 It's a bomb - it also clears the tiles around it.", 2: "➖ It's a row-clear - it also clears its whole row." };
-  function explainPair(g, f, p1, p2, collapse = false) {
+  function explainPair(g, f, p1, p2) {
     const a = g[p1[0]][p1[1]], b = g[p2[0]][p2[1]], conn = connection(g, p1, p2);
-    const [before, after, unlocked] = newOptions(g, f, p1, p2, collapse);
+    const [before, after, unlocked] = newOptions(g, f, p1, p2);
     const lines = [`Tiles ${label(a)} and ${label(b)} can be matched because ${matchReason(a, b)}.`];
     if (conn) lines.push(`They are connected: ${CONNECTION_TEXT[conn]}.`);
-    for (const pw of new Set([power(a), power(b)])) if (pw) lines.push(POWER_TEXT[pw]);
     if (unlocked.length) lines.push(`This move also opens ${unlocked.length} additional matching possibilit${unlocked.length === 1 ? 'y' : 'ies'}.`);
     else if (after.size < before.size - 1) lines.push('Careful - this move removes other options too.');
     return { text: lines, connection: conn, unlocks: unlocked.length, options_before: before.size, options_after: after.size };
   }
-  function hint(g, f, level, reuse = null, budget = 6000, collapse = false) {
+  function hint(g, f, level, reuse = null, budget = 6000) {
     level = Math.max(1, Math.min(3, parseInt(level, 10) || 1));
     if (level === 3) {
-      const [move, reason, res] = bestMove(g, f, budget, collapse);
+      const [move, reason, res] = bestMove(g, f, budget);
       if (!move) return null;
-      const info = explainPair(g, f, move[0], move[1], collapse);
+      const info = explainPair(g, f, move[0], move[1]);
       info.text.push(reason === 'keeps_solvable' ? `Solver: this is the first step of a full clear (${res.moves_to_clear} moves).`
         : 'Solver: no guaranteed full clear found - this move keeps the most options open.');
       return Object.assign({ level: 3, pair: [move[0], move[1]], title: 'Optimal move' }, info);
@@ -719,16 +631,13 @@
     if (reuse) [p1, p2] = reuse;
     else { const found = easiestPair(g, f); if (!found) return null; [p1, p2] = found; }
     if (level === 1) return { level: 1, pair: [p1, p2], title: 'Try these two tiles.', text: ['Try these two tiles.'], unlocks: null };
-    return Object.assign({ level: 2, pair: [p1, p2], title: 'Why this works' }, explainPair(g, f, p1, p2, collapse));
+    return Object.assign({ level: 2, pair: [p1, p2], title: 'Why this works' }, explainPair(g, f, p1, p2));
   }
-  function explainMove(g, f, p1, p2, conn, s0, s1, chain, collapse = false) {
+  function explainMove(g, f, p1, p2, conn, s0, s1, chain) {
     const a = g[p1[0]][p1[1]], b = g[p2[0]][p2[1]];
-    const [before, after, unlocked, d] = newOptions(g, f, p1, p2, collapse);
-    const ba = base(a), bb = base(b);
+    const [before, after, unlocked] = newOptions(g, f, p1, p2);
     return {
-      outcome: d, powers: d.powers.map(([t, p]) => ({ type: t, pos: p, icon: POWER_ICONS[t === 'bomb' ? 1 : 2] })),
-      extra_cleared: d.cleared.length - 2, rows_removed: d.rows_removed.length,
-      values: [label(a), label(b)], rule: matchReason(a, b), sum_to_10: ba + bb === 10 && ba !== WILD && bb !== WILD, equal: ba === bb,
+      values: [label(a), label(b)], rule: matchReason(a, b), sum_to_10: a + b === 10 && a !== WILD && b !== WILD, equal: a === b,
       connection: conn, same_row: p1[0] === p2[0], same_column: p1[1] === p2[1], diagonal: conn === 'diagonal', wrap: conn === 'wrap',
       distance: Math.max(Math.abs(p1[0] - p2[0]), Math.abs(p1[1] - p2[1])),
       options_before: before.size, options_after: after.size, unlocked,
@@ -775,7 +684,7 @@
   }
 
   // ======================================================== session ======
-  const MAX_HISTORY = 40, ADD_COST = 50, MAX_ROWS = 40;
+  const MAX_HISTORY = 40;
   const now = () => Date.now() / 1000;
   const clone = (o) => JSON.parse(JSON.stringify(o));
 
@@ -793,7 +702,6 @@
       started_at: t, deadline: cfg.time_limit ? t + cfg.time_limit : null, par_time: o.par || null, move_limit: cfg.move_limit,
       shield: false, double_coins: false, assisted: false, items_used: [], status: 'active', end_reason: null,
       ended_at: null, history: [], last_explain: null,
-      adds_used: 0, adds_free: cfg.adds_free, collapse: cfg.collapse, needs_add: false, rows_cleared: 0, powers_fired: 0,
     };
   }
   const cfgOf = (s) => MODES[s.mode];
@@ -810,7 +718,6 @@
     v.can_undo = s.history.length > 0 && (s.undos_left === null || s.undos_left > 0);
     v.available_pairs = findPairs(s.grid, s.frozen).length;
     v.mode_config = cfg;
-    v.add = addInfo(s);
     if (!cfg.show_score) v.score = null;
     return clone(v);
   }
@@ -835,10 +742,9 @@
     if (t >= s.deadline) { finish(s, 'finished', 'time_up', s.deadline); return true; }
     return false;
   }
-  const snapshot = (s) => clone({ grid: s.grid, frozen: s.frozen, score: s.score, chain: s.chain, last_unlocked: s.last_unlocked, moves: s.moves, boards_cleared: s.boards_cleared, rows_cleared: s.rows_cleared || 0 });
+  const snapshot = (s) => clone({ grid: s.grid, frozen: s.frozen, score: s.score, chain: s.chain, last_unlocked: s.last_unlocked, moves: s.moves, boards_cleared: s.boards_cleared });
 
   function points(s, a, b, conn, dist, chained) {
-    a = base(a); b = base(b);
     let p = 10;
     if (s.streak >= 3) p += Math.min(50, 5 * (s.streak - 2));
     if (a + b === 10 && a !== WILD && b !== WILD) p += 5;
@@ -859,7 +765,6 @@
     if (checkTimeout(s, t)) return { success: false, message: "Time's up!", game_over: true };
     if (s.status !== 'active') return { success: false, message: 'This game is over.', game_over: true };
     if (s.stuck) return { success: false, message: 'Deadlock! Undo your last move or end the game.', stuck: true };
-    if (s.needs_add) return { success: false, message: 'No moves left - tap ➕ to add numbers.', needs_add: true };
     p1 = [p1[0], p1[1]]; p2 = [p2[0], p2[1]];
     const g = s.grid, f = s.frozen;
     s.attempts++;
@@ -879,78 +784,28 @@
     s.streak++; s.max_streak = Math.max(s.max_streak, s.streak); s.matches++; s.moves++;
     s.chain = chained ? s.chain + 1 : (cfg.chain ? 1 : 0); s.max_chain = Math.max(s.max_chain, s.chain);
     const dist = Math.max(Math.abs(p1[0] - p2[0]), Math.abs(p1[1] - p2[1]));
-    let pts = points(s, a, b, conn, dist, chained);
-    const collapse = !!s.collapse;
-    const ex = explainMove(g, f, p1, p2, conn, s0, s.streak, s.chain, collapse);
-    const out = ex.outcome; delete ex.outcome;
-    if (ex.extra_cleared > 0) pts += 20 * ex.extra_cleared;       // power-ups: bonus per extra tile
-    if (ex.rows_removed) pts += 25 * ex.rows_removed;              // cleared rows
+    const pts = points(s, a, b, conn, dist, chained);
     s.score += pts;
+    const ex = explainMove(g, f, p1, p2, conn, s0, s.streak, s.chain);
+    const [ng, nf] = applyMove(g, f, p1, p2);
     const frozenBefore = f.map(p => [p[0], p[1]]);
-    s.grid = out.grid; s.frozen = out.frozen; s.rows = out.grid.length;
-    s.rows_cleared = (s.rows_cleared || 0) + ex.rows_removed; s.powers_fired = (s.powers_fired || 0) + ex.powers.length;
-    s.last_unlocked = ex.unlocked; s.hint_pair = null; s.needs_add = false; ex.points = pts; s.last_explain = ex;
-    const clearedSet = new Set(out.cleared.map(key)), nfKeys = new Set(s.frozen.map(key));
-    const ev = { success: true, valid: true, points: pts, explain: ex, cleared: out.cleared, rows_removed: out.rows_removed,
-      powers: ex.powers,
-      thawed: frozenBefore.filter(p => !clearedSet.has(key(p)) && !nfKeys.has(key([remapRow(p[0], out.rows_removed), p[1]]))) };
-    if (tilesLeft(s.grid) === 1) {                                 // a single tile can never be matched
-      s.grid.forEach((row, r) => row.forEach((v, c) => { if (v > 0) { s.grid[r][c] = 0; ev.last_tile = [r, c]; } }));
-      s.score += 30;
-    }
+    s.grid = ng; s.frozen = nf; s.last_unlocked = ex.unlocked; s.hint_pair = null; ex.points = pts; s.last_explain = ex;
+    const nfKeys = new Set(nf.map(key));
+    const ev = { success: true, valid: true, points: pts, explain: ex, thawed: frozenBefore.filter(p => !nfKeys.has(key(p))) };
     if (isCleared(s.grid)) {
       if (cfg.endless) { s.boards_cleared++; s.score += 50; newBoard(s); ev.new_board = true; }
       else { finish(s, 'won', 'cleared', t); ev.game_over = true; ev.won = true; return ev; }
     } else if (!findPairs(s.grid, s.frozen).length) {
-      handleDeadlock(s, ev, t);
-      if (ev.game_over) return ev;
+      s.deadlocks++; s.chain = 0;
+      if (cfg.inject_on_deadlock) {
+        const placed = injectSolvablePair(s.grid, new Rng(seedFrom(s.seed, 'inject', s.matches)));
+        if (!placed) s.frozen = [];
+        s.injections++; ev.deadlock = 'injected'; ev.injected = placed ? placed : [];
+      } else if (s.undos_left === null || s.undos_left > 0) { s.stuck = true; ev.deadlock = 'stuck'; }
+      else { finish(s, s.mode === 'expert' ? 'lost' : 'finished', 'deadlock', t); ev.deadlock = 'final'; ev.game_over = true; return ev; }
     }
     if (s.move_limit && s.attempts >= s.move_limit && s.status === 'active') { finish(s, 'finished', 'out_of_moves', t); ev.game_over = true; }
     return ev;
-  }
-
-  // ------------------------------------------------------- "+" add numbers --
-  function addInfo(s) {
-    const free = s.adds_free === undefined ? 0 : s.adds_free, used = s.adds_used || 0, cfg = cfgOf(s);
-    const freeLeft = free === null ? null : Math.max(0, free - used);
-    const cost = (free === null || freeLeft > 0) ? 0 : (cfg.items_allowed ? ADD_COST : null);
-    return { free_left: freeLeft, cost, used, available: s.status === 'active' && cost !== null && tilesLeft(s.grid) > 0, needed: !!s.needs_add };
-  }
-
-  function addNumbers(s, paid = false) {
-    if (s.status !== 'active') return { success: false, message: 'This game is over.' };
-    const info = addInfo(s);
-    if (info.cost === null) return { success: false, message: "Adding numbers isn't allowed in this mode." };
-    if (info.cost && !paid) return { success: false, message: `No free adds left - it costs ${ADD_COST} coins.`, cost: info.cost };
-    const result = addRows(s.grid, MAX_ROWS);
-    if (!result) return { success: false, message: 'The board is full - match some tiles first.' };
-    const [grid, added] = result;
-    s.grid = grid; s.rows = grid.length; s.adds_used = (s.adds_used || 0) + 1;
-    s.pairs_total += Math.floor(added.length / 2);
-    s.history = []; s.hint_pair = null; s.stuck = false; s.needs_add = false; s.last_unlocked = [];
-    const ev = { success: true, added, paid: !!info.cost, message: `➕ ${added.length} numbers added` };
-    if (!findPairs(s.grid, s.frozen).length) handleDeadlock(s, ev, now());
-    return ev;
-  }
-
-  function handleDeadlock(s, ev, t) {
-    const cfg = cfgOf(s);
-    s.deadlocks++; s.chain = 0;
-    const info = addInfo(s);
-    if (cfg.auto_add && info.cost === 0 && addRows(s.grid, MAX_ROWS)) {
-      const auto = addNumbers(s);
-      ev.deadlock = 'auto_added'; ev.added = auto.added || [];
-      return;
-    }
-    if (info.cost !== null && addRows(s.grid, MAX_ROWS)) { s.needs_add = true; ev.deadlock = 'add_needed'; return; }
-    if (cfg.inject_on_deadlock && !cfg.move_limit) {
-      const placed = injectSolvablePair(s.grid, new Rng(seedFrom(s.seed, 'inject', s.matches)));
-      if (!placed) s.frozen = [];
-      s.injections++; ev.deadlock = 'injected'; ev.injected = placed ? placed : [];
-      return;
-    }
-    if (s.undos_left === null || s.undos_left > 0) { s.stuck = true; ev.deadlock = 'stuck'; }
-    else { finish(s, s.mode === 'expert' ? 'lost' : 'finished', 'deadlock', t); ev.deadlock = 'final'; ev.game_over = true; }
   }
 
   function undo(s) {
@@ -959,7 +814,7 @@
     if (s.undos_left !== null && s.undos_left <= 0) return { success: false, message: 'No undos left.' };
     Object.assign(s, s.history.pop());
     if (s.undos_left !== null) s.undos_left--;
-    s.undos_used++; s.streak = 0; s.stuck = false; s.needs_add = false; s.hint_pair = null; s.rows = s.grid.length;
+    s.undos_used++; s.streak = 0; s.stuck = false; s.hint_pair = null;
     return { success: true };
   }
 
@@ -970,7 +825,7 @@
     const cost = (free || (level === 2 && reuse)) ? 0 : 1;
     if (cost && s.hints_left !== null && s.hints_left <= 0)
       return { success: false, message: cfgOf(s).hints === 0 ? 'Hints are disabled in this mode.' : 'No hints remaining!' };
-    const h = hint(s.grid, s.frozen, level, reuse, 6000, !!s.collapse);
+    const h = hint(s.grid, s.frozen, level, reuse);
     if (!h) return { success: false, message: 'No moves available right now.' };
     if (cost) { if (s.hints_left !== null) s.hints_left--; s.hints_used++; }
     s.hint_pair = h.pair;
@@ -978,7 +833,7 @@
   }
 
   function analyse(s, reveal = false, budget = 20000) {
-    const res = solve(s.grid, s.frozen, budget, !!s.collapse);
+    const res = solve(s.grid, s.frozen, budget);
     if (reveal && res.solvable) s.assisted = true;
     const out = clone(res);
     if (!reveal) out.path = [];
@@ -999,7 +854,6 @@
         if (findPairs(s.grid, s.frozen).length) break;
       }
       s.assisted = true; s.stuck = false;
-      s.needs_add = !!s.needs_add && !findPairs(s.grid, s.frozen).length;
       result = { success: true, message: 'Board shuffled! 🔀' };
     } else if (item === 'smart_hint') {
       result = useHint(s, 3, true);
@@ -1031,13 +885,11 @@
       hints_used: s.hints_used, undos_used: s.undos_used, max_streak: s.max_streak, max_chain: s.max_chain,
       deadlocks: s.deadlocks, duration: r2(elapsed(s), 2), pairs: s.pairs_total, rows: s.rows, cols: s.cols,
       difficulty: s.difficulty, difficulty_score: s.difficulty_score, assisted: s.assisted,
-      adds_used: s.adds_used || 0, rows_cleared: s.rows_cleared || 0, powers_fired: s.powers_fired || 0,
     };
   }
 
   const Engine = {
-    EMPTY, BLOCKED, WILD, BOMB, ROW_CLEAR, base, power, collapseRows, applyMoveDetailed, addRows, addPowers,
-    ADD_COST, addInfo, addNumbers, label, canMatch, matchReason, isCleared, tilesLeft, connection, findPairs, pairKey, applyMove,
+    EMPTY, BLOCKED, WILD, label, canMatch, matchReason, isCleared, tilesLeft, connection, findPairs, pairKey, applyMove,
     validateMove, parseGridText, Rng, seedFrom, solve, bestMove, randomPlayout, valuesPairable,
     TIERS, levelSpec, generateLevel, measure, classify, starsFor, validate, injectSolvablePair,
     MODES, PACKS, PACK_BY_ID, PACK_UNLOCK_REQUIREMENT, packLevelSize, boardDims, specFor, parTime,

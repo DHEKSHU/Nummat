@@ -13,10 +13,7 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmtTime = (s) => { s = Math.max(0, Math.round(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-  const label = (v) => { if (v <= 0) return ''; const b = v % 100; return b === 11 ? '★' : String(b); };
-  const POWER_ICON = { 1: '💣', 2: '➖' };
-  const POWER_CLASS = { 1: 'pw-bomb', 2: 'pw-row' };
-  const COMBO_AT = [3, 5, 8, 10, 15, 20, 25, 30, 40, 50];
+  const label = (v) => v === 11 ? '★' : v > 0 ? String(v) : '';
   const THEME_ICON = { classic: 'default_icon.png', winter: 'winter_icon.png', autumn: 'autumn_icon.png', spring: 'spring_icon.png', summer: 'summer_icon.png' };
   const THEMES = ['classic', 'winter', 'autumn', 'spring', 'summer'];
   const ENCOURAGE = ['Brilliant! 💡', 'Smooth match! 🎯', 'On fire! 🔥', 'Perfect combo! 🌟', 'Amazing! ⭐', 'Keep going! 🚀', 'Excellent! 🎊', 'Spectacular! ✨', 'Unstoppable! 💪', 'Legendary! 👑'];
@@ -324,7 +321,6 @@
     if (!S.lastStart || S.lastStart.mode !== r.game.mode) S.lastStart = { mode: r.game.mode, pack: r.game.pack, level: r.game.level_index };
     setProfile(r.profile);
     go('game');
-    $('#board-scroll').scrollTop = 0;
     const pack = r.game.pack && packTheme(r.game.pack);
     if (pack) applyTheme(pack);
     update(r);
@@ -372,20 +368,7 @@
     $('#chain-meter').hidden = !cfg.chain;
     $('#chain-count').textContent = g.chain;
     $('#shield-pill').hidden = !g.shield;
-    const add = g.add || { available: false };
-    const addLabel = add.cost === 0 ? `${add.free_left == null ? 'free' : add.free_left + ' free'}` : add.cost ? `🪙${add.cost}` : '';
-    $('#add-cost').textContent = addLabel ? `(${addLabel})` : '';
-    $('#stuck-add-cost').textContent = addLabel ? `(${addLabel})` : '';
-    $('#a-add').hidden = add.cost == null && add.free_left === 0 && !add.used;   // modes without adds (Daily)
-    $('#a-add').disabled = !add.available || g.status !== 'active';
-    $('#a-add').classList.toggle('need', !!g.needs_add && g.status === 'active');
-    const needAdd = !!g.needs_add && g.status === 'active';
-    $('#stuck-banner').hidden = !(g.stuck || needAdd);
-    $('#stuck-banner').classList.toggle('add', needAdd && !g.stuck);
-    $('#stuck-add').hidden = !needAdd || !add.available;
-    $('#stuck-undo').classList.toggle('ghost', needAdd && add.available);
-    $('#stuck-text').textContent = needAdd && add.available ? '🔒 No pairs left - add more numbers!'
-      : '🔒 Deadlock - no moves left.';
+    $('#stuck-banner').hidden = !g.stuck;
 
     // action availability
     const hintsLeft = g.hints_left;
@@ -406,11 +389,8 @@
 
   function renderBoard(boardEl, grid, frozen, opts = {}) {
     const rows = grid.length, cols = grid[0].length;
-    const scroller = boardEl.parentElement && boardEl.parentElement.classList.contains('board-scroll') ? boardEl.parentElement : null;
-    const fit = scroller ? Math.min(rows, Math.max(9, cols + 2)) : rows;
-    [boardEl, scroller].forEach(el => { if (!el) return; el.style.setProperty('--cols', cols); el.style.setProperty('--rows', rows); el.style.setProperty('--fitrows', fit); });
-    boardEl.classList.toggle('scrollable', rows > fit);
-    let spawnI = 0;
+    boardEl.style.setProperty('--cols', cols);
+    boardEl.style.setProperty('--rows', rows);
     const fz = new Set((frozen || []).map(p => p[0] + ',' + p[1]));
     const un = new Set();
     (opts.unlocked || []).forEach(([a, b]) => { un.add(a[0] + ',' + a[1]); un.add(b[0] + ',' + b[1]); });
@@ -419,36 +399,25 @@
       for (let c = 0; c < cols; c++) {
         const v = grid[r][c], k = r + ',' + c;
         const cls = ['tile'];
-        const b = v > 0 ? v % 100 : v, pw = v > 0 ? Math.floor(v / 100) : 0;
         if (v === 0) cls.push('empty');
         else if (v < 0) cls.push('blocked');
         else {
-          if (b === 11) cls.push('wild');
-          if (pw) cls.push('power', POWER_CLASS[pw]);
+          if (v === 11) cls.push('wild');
           if (fz.has(k)) cls.push('frozen');
           if (un.has(k)) cls.push('unlocked');
         }
         if (opts.spawn && opts.spawn.has(k)) cls.push('spawn');
         if (opts.thaw && opts.thaw.has(k)) cls.push('thaw');
-        const aria = v > 0 ? `${label(v)}${pw === 1 ? ' bomb' : pw === 2 ? ' row clear' : ''}${fz.has(k) ? ' frozen' : ''}` : (v < 0 ? 'wall' : 'empty');
-        const extra = (v > 0 && b >= 1 && b <= 9 ? ` data-d="${b}"` : '') + (opts.spawn && opts.spawn.has(k) ? ` style="--i:${Math.min(spawnI++, 18)}"` : '');
-        html.push(`<div class="${cls.join(' ')}" role="gridcell" data-r="${r}" data-c="${c}"${extra} ${v > 0 ? 'tabindex="0"' : ''} aria-label="row ${r + 1} column ${c + 1}: ${aria}">${label(v)}${pw ? `<i class="pw">${POWER_ICON[pw]}</i>` : ''}</div>`);
+        const aria = v > 0 ? `${label(v)}${fz.has(k) ? ' frozen' : ''}` : (v < 0 ? 'wall' : 'empty');
+        html.push(`<div class="${cls.join(' ')}" role="gridcell" data-r="${r}" data-c="${c}" ${v > 0 ? 'tabindex="0"' : ''} aria-label="row ${r + 1} column ${c + 1}: ${aria}">${label(v)}</div>`);
       }
     }
     boardEl.innerHTML = html.join('');
-    if (scroller) updateScrollHint();
     if (boardEl.id === 'board' && !opts.plain) {
       if (S.selected) tileAt(S.selected)?.classList.add('selected');
       if (S.hintPair) S.hintPair.forEach(p => tileAt(p)?.classList.add('hint'));
     }
   }
-
-  function updateScrollHint() {
-    const sc = $('#board-scroll');
-    $('#scroll-more').hidden = sc.scrollHeight - sc.clientHeight - sc.scrollTop < 8;
-  }
-  $('#board-scroll').addEventListener('scroll', updateScrollHint, { passive: true });
-  window.addEventListener('resize', () => { if (S.view === 'game') updateScrollHint(); });
 
   const tileAt = (p, board = $('#board')) => board.querySelector(`.tile[data-r="${p[0]}"][data-c="${p[1]}"]`);
   const isPlayable = (el) => el && el.classList.contains('tile') && !el.classList.contains('empty') && !el.classList.contains('blocked');
@@ -530,28 +499,6 @@
     $$('#board .tile.selected').forEach(t => t.classList.remove('selected'));
   }
 
-  const COMBO_WORDS = { 3: 'NICE', 5: 'GREAT', 8: 'SUPER', 10: 'AWESOME', 15: 'INCREDIBLE', 20: 'UNSTOPPABLE', 25: 'LEGENDARY', 30: 'GODLIKE', 40: 'MYTHIC', 50: 'NUMMAT MASTER' };
-  function showCombo(n) {
-    const el = $('#combo-pop');
-    el.innerHTML = `Combo ×${n}<small>${COMBO_WORDS[n] || 'WOW'}</small>`;
-    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
-    FX.haptic([10, 30, 10]);
-  }
-
-  function scrollToTiles(keys) {
-    const sc = $('#board-scroll');
-    const lastRow = Math.max(...keys.map(k => +k.split(',')[0]));
-    const t = $(`#board .tile[data-r="${lastRow}"]`);
-    if (t && sc.scrollHeight > sc.clientHeight) sc.scrollTop = t.offsetTop + t.offsetHeight - sc.clientHeight + 12;
-  }
-
-  function celebrateClear(big = true) {
-    const w = $('.board-wrap');
-    w.classList.remove('cleared-glow'); void w.offsetWidth; w.classList.add('cleared-glow');
-    FX.confetti(big ? 110 : 45);
-    FX.haptic([30, 50, 30, 50, 60]);
-  }
-
   async function attemptMove(a, b) {
     if (S.busy) return;
     S.busy = true;
@@ -562,62 +509,22 @@
     const ev = r.event || {};
     if (ev.valid) {
       FX.haptic(15);
-      FX.line(ta, tb);
       [ta, tb].forEach(t => t && t.classList.add('matched'));
       FX.burst(tb);
-      const x = ev.explain || {};
-      const powers = ev.powers || [];
-      let delay = 320;
-      if (powers.length) {
-        // 💣 / ➖ go off one after another, then the tiles they caught burst
-        powers.forEach((pw, i) => setTimeout(() => {
-          if (pw.type === 'bomb') FX.shock(tileAt(pw.pos));
-          else { const row = $$(`#board .tile[data-r="${pw.pos[0]}"]`); FX.beam(row[0], row[row.length - 1]); }
-        }, 90 + i * 170));
-        const pair = new Set([a.join(','), b.join(',')]);
-        let n = 0;
-        (ev.cleared || []).forEach(p => {
-          if (pair.has(p.join(','))) return;
-          const t = tileAt(p);
-          if (t && !t.classList.contains('empty')) { t.style.setProperty('--i', n++); setTimeout(() => t.classList.add('blasted'), 120 + Math.floor(n / 4) * 60); }
-        });
-        delay = 460 + powers.length * 170 + n * 35;
-        FX.haptic([20, 30, 45]);
-      }
-      const rowsGone = (ev.rows_removed || []).length;
-      if (rowsGone) delay = Math.max(delay, 520);
-      S.busy = delay > 330;          // board coordinates change after a blast/collapse - wait for the redraw
-      const chainTxt = x.chain > 1 ? ` · Chain ×${x.chain}` : '';
-      let msg;
-      if (powers.length) {
-        const boom = powers.some(p => p.type === 'bomb') ? 'Boom!' : 'Row blast!';
-        say(msg = `${powers.map(p => p.icon).join('')} ${boom} +${ev.points}${x.extra_cleared ? ` · ${x.extra_cleared} extra tiles` : ''}`);
-      } else say(msg = `${ENCOURAGE[Math.floor(Math.random() * ENCOURAGE.length)]} +${ev.points}${chainTxt}`);
-      const st = r.game.streak, before = (x.streak || [0])[0];
-      if (COMBO_AT.includes(st) && st > before) setTimeout(() => showCombo(st), 150);
+      const chainTxt = ev.explain && ev.explain.chain > 1 ? ` · Chain ×${ev.explain.chain}` : '';
+      say(`${ENCOURAGE[Math.floor(Math.random() * ENCOURAGE.length)]} +${ev.points}${chainTxt}`);
       S.hintPair = null; $('#hint-card').hidden = true;
-      renderExplain(x);
-      const spawnList = [...(ev.injected || []), ...(ev.added || [])].map(p => p.join(','));
-      const spawn = new Set(spawnList);
+      renderExplain(ev.explain);
+      const spawn = new Set((ev.injected || []).map(p => p.join(',')));
       const thaw = new Set((ev.thawed || []).map(p => p.join(',')));
       setTimeout(() => {
         S.game = r.game; S.receivedAt = performance.now(); setProfile(r.profile);
         renderGame();
         if (spawn.size || thaw.size) renderBoard($('#board'), r.game.grid, r.game.frozen, { unlocked: r.game.last_unlocked, spawn, thaw });
-        if (rowsGone) {
-          const bd = $('#board'); bd.classList.remove('settle'); void bd.offsetWidth; bd.classList.add('settle');
-          say(powers.length ? `${msg} · 🧹 ${rowsGone > 1 ? rowsGone + ' rows' : 'row'} gone` : `🧹 ${rowsGone > 1 ? rowsGone + ' rows' : 'Row'} cleared! +${25 * rowsGone}`);
-        }
-        if (ev.added && ev.added.length) scrollToTiles(spawnList);
-        S.busy = false;
-      }, delay);
-      if (ev.last_tile) setTimeout(() => say('✨ Last tile cleared for you! +30'), delay + 200);
-      if (ev.deadlock === 'add_needed') setTimeout(() => say('🔒 No moves left - tap ➕ Add to get more numbers.', true), delay + 150);
-      if (ev.deadlock === 'auto_added') setTimeout(() => say('➕ Out of pairs - the numbers were added again below.'), delay + 150);
-      if (ev.deadlock === 'injected') setTimeout(() => say('🔒 Deadlock! A fresh pair was added.', true), delay + 150);
-      if (ev.deadlock === 'stuck') setTimeout(() => say('🔒 Deadlock - undo or end the run.', true), delay + 150);
-      if (ev.new_board) setTimeout(() => { celebrateClear(false); say('🧹 Board cleared! +50 · new board'); }, delay);
-      if (ev.won) setTimeout(() => celebrateClear(true), delay - 100);
+      }, 320);
+      if (ev.deadlock === 'injected') setTimeout(() => say('🔒 Deadlock! A fresh pair was added.', true), 700);
+      if (ev.deadlock === 'stuck') setTimeout(() => say('🔒 Deadlock - undo or end the run.', true), 400);
+      if (ev.new_board) setTimeout(() => say('🧹 Board cleared! +50 · new board'), 500);
     } else if (ev.valid === false) {
       FX.haptic([30, 40, 30]);
       [ta, tb].forEach(t => { if (t) { t.classList.add('shake'); setTimeout(() => t.classList.remove('shake'), 350); } });
@@ -628,35 +535,8 @@
       update(r);
     }
     (r.new_achievements || []).forEach(a => toast(`${a.icon} ${a.name}`, `Achievement unlocked · +${a.reward} coins`));
-    if (r.result) setTimeout(() => showResult(r.result, r.game), ev.won ? 1500 : 800);
+    if (r.result) setTimeout(() => showResult(r.result, r.game), 700);
   }
-
-  // ➕ copy the remaining numbers onto the end of the board
-  async function addNumbers() {
-    if (S.busy || !S.game || S.game.status !== 'active') return;
-    S.busy = true;
-    const r = await api(`/api/games/${S.gameId}/add`, {});
-    S.busy = false;
-    if (!r.success) { say(r.message || 'Error', true); return; }
-    const ev = r.event || {};
-    if (!ev.success) {
-      say(ev.message, true);
-      if (ev.needs_coins) toast('🪙 Not enough coins', 'Win levels, do the Daily Challenge or unlock achievements to earn coins.', 'info');
-      return;
-    }
-    clearSelection(); S.hintPair = null; $('#hint-card').hidden = true;
-    S.game = r.game; S.receivedAt = performance.now(); if (r.profile) setProfile(r.profile);
-    renderGame();
-    const keys = (ev.added || []).map(p => p.join(','));
-    renderBoard($('#board'), r.game.grid, r.game.frozen, { unlocked: r.game.last_unlocked, spawn: new Set(keys) });
-    if (keys.length) setTimeout(() => scrollToTiles(keys), 60);
-    FX.haptic(12);
-    say(ev.coins_spent ? `➕ ${keys.length} numbers added · -${ev.coins_spent} 🪙` : `➕ ${keys.length} numbers added`);
-    if (ev.deadlock === 'add_needed') setTimeout(() => say('Still no pairs - add again!', true), 900);
-    if (r.result) setTimeout(() => showResult(r.result, r.game), 800);
-  }
-  $('#a-add').addEventListener('click', addNumbers);
-  $('#stuck-add').addEventListener('click', addNumbers);
 
   // --------------------------------------------------- hints & explain --
   async function askHint(level) {
@@ -731,7 +611,7 @@
 
   // -------------------------------------------------------------- solver --
   function textBoard(grid) {
-    return grid.map(row => row.map(v => v < 0 ? '■' : v ? label(v) : '·').join('  ')).join('\n');
+    return grid.map(row => row.map(v => v === 11 ? '★' : v < 0 ? '■' : v ? v : '·').join('  ')).join('\n');
   }
 
   function metricsHtml(m) {
@@ -948,7 +828,7 @@
   $('#lab-example').addEventListener('click', () => { S.labIdx = (S.labIdx + 1) % LAB_EXAMPLES.length; $('#lab-input').value = LAB_EXAMPLES[S.labIdx]; });
   $('#lab-current').addEventListener('click', () => {
     if (!S.game) return;
-    $('#lab-input').value = S.game.grid.map(r => r.map(v => v < 0 ? '#' : !v ? '.' : v % 100 === 11 ? '*' : v % 100).join(' ')).join('\n');
+    $('#lab-input').value = S.game.grid.map(r => r.map(v => v === 11 ? '*' : v < 0 ? '#' : v || '.').join(' ')).join('\n');
     S.labFrozen = S.game.frozen;
   });
   $('#lab-input').addEventListener('input', () => { S.labFrozen = []; });
@@ -1361,11 +1241,9 @@
         <div class="feature"><span class="fi">🎯</span><div><b>Best move</b><small>The solver's optimal move.</small></div></div>
         <div class="feature"><span class="fi">↩</span><div><b>Undo</b><small>Take back your last match.</small></div></div>
         <div class="feature"><span class="fi">🧠</span><div><b>Solve</b><small>Checks if the board can still be cleared, and can play the solution.</small></div></div>
-        <div class="feature"><span class="fi">➕</span><div><b>Add numbers</b><small>Copies every number left onto new rows at the bottom. 2 free per game, then 🪙50.</small></div></div>
-        <div class="feature"><span class="fi">💣</span><div><b>Bomb tiles</b><small>Match one and it also clears the tiles around it.</small></div></div>
-        <div class="feature"><span class="fi">➖</span><div><b>Row-clear tiles</b><small>Match one and its whole row disappears.</small></div></div>
+        <div class="feature"><span class="fi">📖</span><div><b>Why this worked</b><small>After every match: the rule, the connection and what it opened.</small></div></div>
       </div>
-      <p class="muted small">Empty rows vanish and the board slides up (+25 each). No pairs left? Tap ➕ Add. In Daily you can't add - use Undo!</p>`,
+      <p class="muted small">Stuck with no moves? In most modes NUMMAT adds a fresh pair; in Expert and Daily, a deadlock ends the run - use Undo!</p>`,
     () => `<h2 id="tour-title">Rewards & progress</h2>
       <div class="feature-grid">
         <div class="feature"><span class="fi">🔥</span><div><b>Streaks</b><small>Match without mistakes for bonus points.</small></div></div>

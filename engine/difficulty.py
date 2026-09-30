@@ -134,7 +134,6 @@ def recommend(skill: float) -> Dict:
         "hints": 3 if skill < 4 else 2 if skill < 7 else 1,
         "frozen": size // 3 if skill >= 6 else 0,
         "blocked": blocked,
-        "powers": 0 if size < 6 else (1 if size < 8 else 2),
     }
 
 

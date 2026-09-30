@@ -93,20 +93,15 @@
           </div>
 
           <div id="stuck-banner" class="banner danger" hidden>
-            <span id="stuck-text">🔒 Deadlock - no moves left.</span>
+            <span>🔒 Deadlock - no moves left.</span>
             <div class="banner-actions">
-              <button class="btn small gold" id="stuck-add" hidden>➕ Add <small id="stuck-add-cost"></small></button>
               <button class="btn small" id="stuck-undo">↩ Undo</button>
               <button class="btn small ghost" id="stuck-end">End run</button>
             </div>
           </div>
 
           <div class="board-wrap">
-            <div class="board-scroll" id="board-scroll">
-              <div id="board" class="board" role="grid" aria-label="Game board"></div>
-            </div>
-            <div class="scroll-more" id="scroll-more" hidden>▼ more rows</div>
-            <div class="combo-pop" id="combo-pop" aria-hidden="true"></div>
+            <div id="board" class="board" role="grid" aria-label="Game board"></div>
             <div id="solution-bar" class="solution-bar" hidden>
               <span id="solution-step">Move 1 / 7</span>
               <button class="btn small ghost" id="sol-prev" aria-label="Previous">◀</button>
@@ -122,7 +117,6 @@
             <button class="btn action" id="a-hint" title="Show a possible pair"><span>💡</span><em>Hint <small id="hint-count"></small></em></button>
             <button class="btn action ghost" id="a-why" title="Explain the hinted pair"><span>❓</span><em>Why?</em></button>
             <button class="btn action ghost" id="a-best" title="Optimal move (solver)"><span>🎯</span><em>Best move</em></button>
-            <button class="btn action add-btn" id="a-add" title="Add the remaining numbers again at the bottom of the board"><span>➕</span><em>Add <small id="add-cost"></small></em></button>
             <button class="btn action ghost" id="a-undo" title="Undo"><span>↩</span><em>Undo <small id="undo-count"></small></em></button>
             <button class="btn action ghost" id="a-solve" title="Can this board be solved?"><span>🧠</span><em>Solve</em></button>
             <button class="btn action ghost" id="a-items" title="Use an item"><span>🎒</span><em>Items</em></button>

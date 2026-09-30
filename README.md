@@ -52,14 +52,7 @@ The engine has no Flask imports. Each game's state is a JSON document stored on 
 | ⏱️ **Time Attack** | 02:00 on the clock. A cleared board is replaced right away. |
 | 📅 **Daily Challenge** | One board per day for everyone, seeded by the date. 20 moves (every attempt counts), no hints or items, global scoreboard. |
 | 🧘 **Zen** | No timer, no score, unlimited undo and hints. |
-| 💀 **Expert** | Blocked cells, frozen tiles, wildcards and power tiles, with 1 undo, 1 hint and 1 free ➕ add. |
-
-### Board mechanics
-- **➕ Add numbers:** copies every number still on the board onto new rows at the end (powers stripped, up to 40 rows). 2 free adds per game, then 🪙50 each. Time Attack and Zen add automatically; the Daily Challenge has no adds. When no pair is left, the game asks you to add instead of ending.
-- **Row collapse:** a row that becomes completely empty is removed and the board slides up (+25 per row).
-- **Power tiles:** 💣 bomb (clears the 3×3 around it) and ➖ row clear (clears its row). They are stored in the tile value as `number + 100 × power`, can trigger each other, and give +20 per extra tile cleared.
-- **Long boards** scroll inside the board area; tiles keep a comfortable size.
-- **Effects:** digit colours, a connector line on each match, combo pop-ups at streak 3/5/8/10…, shockwaves and row beams for powers, spawn animation for added tiles and confetti when the board is cleared.
+| 💀 **Expert** | Blocked cells, frozen tiles and wildcards, with 1 undo and 1 hint. A deadlock ends the run. |
 
 ### Adaptive Difficulty Engine (`engine/difficulty.py`)
 After every game NUMMAT scores six things: accuracy, speed (seconds per pair), hint and undo usage, streak quality, deadlocks and completion. It weights that result by how hard the board was, then blends it into your running skill (0-10) with an exponential moving average. The skill sets the next board's grid size, pair count, complexity tier, par time, hint allowance and special tiles:

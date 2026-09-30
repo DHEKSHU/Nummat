@@ -34,7 +34,7 @@ import random
 from dataclasses import asdict, dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from .rules import BLOCKED, BOMB, EMPTY, ROW_CLEAR, WILD, Pos, base, find_pairs, tiles_left
+from .rules import BLOCKED, EMPTY, WILD, Pos, find_pairs, tiles_left
 from .rules import apply_move, validate_move
 from .solver import SolveResult, random_playout, solve
 
@@ -51,7 +51,6 @@ class LevelSpec:
     blocked: int = 0             # number of wall cells
     frozen: int = 0              # number of frozen tiles
     wild: int = 0                # number of wildcard tiles
-    powers: int = 0              # power-up tiles (bomb / row-clear) added to the finished board
     target: Optional[str] = None # EASY / MEDIUM / HARD / EXPERT, or None = accept first valid
     low_first_moves: bool = False  # Chain mode: few moves available at the start
     max_attempts: int = 10
@@ -207,18 +206,6 @@ def known_solution(grid, frozen, path, budget: int) -> Optional[SolveResult]:
     return probe if probe.solvable else None
 
 
-def add_powers(grid, frozen, count: int, rng: random.Random) -> None:
-    """Turn `count` plain number tiles into power-ups (alternating bomb / row-clear). In place."""
-    if count <= 0:
-        return
-    fz = set(map(tuple, frozen))
-    tiles = [(r, c) for r, row in enumerate(grid) for c, v in enumerate(row)
-             if 0 < v < 100 and v != WILD and (r, c) not in fz]
-    kinds = [BOMB, ROW_CLEAR]
-    for i, (r, c) in enumerate(rng.sample(tiles, min(count, len(tiles)))):
-        grid[r][c] += 100 * kinds[(i + rng.randrange(2)) % 2]
-
-
 def _add_frozen(grid, count: int, rng: random.Random) -> List[Pos]:
     tiles = [(r, c) for r, row in enumerate(grid) for c, v in enumerate(row) if v > 0 and v != WILD]
     return sorted(rng.sample(tiles, min(count, max(0, len(tiles) // 3))))
@@ -229,7 +216,7 @@ def _add_frozen(grid, count: int, rng: random.Random) -> List[Pos]:
 # --------------------------------------------------------------------------
 def validate(grid, frozen: Sequence[Pos], spec: Optional[LevelSpec] = None) -> Tuple[bool, str]:
     """Mathematical constraints every delivered board must satisfy."""
-    values = [base(v) for row in grid for v in row]
+    values = [v for row in grid for v in row]
     tiles = [v for v in values if v > 0]
     if any(v not in (EMPTY, BLOCKED, WILD) and not 1 <= v <= 9 for v in values):
         return False, "illegal cell value"
@@ -379,14 +366,10 @@ def generate_level(spec: LevelSpec, seed: int) -> Level:
         grid, path = _reverse_build(plain, rng, 0.3)
         res = known_solution(grid, [], path, 500)
         metrics = measure(grid, [], rng, spec.rollouts, res)
-        add_powers(grid, [], spec.powers, rng)
         return Level(grid=grid, frozen=[], seed=seed, metrics=metrics,
                      difficulty=metrics["difficulty"], difficulty_score=metrics["difficulty_score"],
                      attempts=attempts, solution=res.path)
     best[1].attempts = attempts
-    # Power-ups go on last: the board is verified solvable without them, and they only
-    # ever remove extra tiles (the "+" button covers any leftovers).
-    add_powers(best[1].grid, best[1].frozen, spec.powers, rng)
     return best[1]
 
 

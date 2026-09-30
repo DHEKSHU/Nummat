@@ -14,7 +14,7 @@
   'use strict';
   const E = root.NummatEngine || (typeof require !== 'undefined' ? require('./engine.js') : null);
   const STORE_KEY = 'nummat-save-v1';
-  const LEVEL_VERSION = 'm2';
+  const LEVEL_VERSION = 'm1';
   const MAX_GAMES = 400;                 // finished-game history kept per device
   const GUEST = 'guest';
 
@@ -444,15 +444,6 @@
         return gamePayload(u, g, { event: ev, new_achievements: newAch });
       }
       if (action === 'undo') return gamePayload(u, g, { event: E.undo(s) });
-      if (action === 'add') {                          // "+": free adds first, then coins
-        const info = E.addInfo(s);
-        let ev;
-        if (info.cost === null) ev = { success: false, message: "Adding numbers isn't allowed in this mode." };
-        else if (info.cost && u.coins < info.cost) ev = { success: false, needs_coins: true,
-          message: `You need ${info.cost} coins to add numbers (${info.cost - u.coins} more). Try Undo or a Shuffle.` };
-        else { ev = E.addNumbers(s, !!info.cost); if (ev.success && info.cost) { u.coins -= info.cost; ev.coins_spent = info.cost; } }
-        return gamePayload(u, g, { event: ev });
-      }
       if (action === 'hint') return gamePayload(u, g, { event: E.useHint(s, body.level || 1) });
       if (action === 'solve') {
         if (!E.MODES[s.mode].solver_allowed) return fail('The solver is disabled in this mode.', 403);

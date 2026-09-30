@@ -106,56 +106,6 @@
     }
   }
 
-  function fxEl(cls, style) {
-    const d = document.createElement('div');
-    d.className = cls;
-    Object.assign(d.style, style);
-    document.body.appendChild(d);
-    return d;
-  }
-  const centre = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r]; };
-
-  // a glowing line between two matched tiles
-  function line(a, b) {
-    if (reduced || !a || !b) return;
-    const [x1, y1] = centre(a), [x2, y2] = centre(b);
-    const d = fxEl('fx-line', { left: x1 + 'px', top: (y1 - 3) + 'px', width: Math.hypot(x2 - x1, y2 - y1) + 'px',
-      transform: `rotate(${Math.atan2(y2 - y1, x2 - x1)}rad)` });
-    setTimeout(() => d.remove(), 500);
-  }
-
-  // bomb: shockwave ring over the 3x3 area
-  function shock(el) {
-    if (!el) return;
-    const [x, y, r] = centre(el);
-    const size = r.width * 3.6;
-    if (!reduced) { const d = fxEl('fx-shock', { left: x + 'px', top: y + 'px', width: size + 'px', height: size + 'px' }); setTimeout(() => d.remove(), 650); }
-    burst(el, 22);
-  }
-
-  // row clear: a beam across the row
-  function beam(first, last) {
-    if (reduced || !first || !last) return;
-    const a = first.getBoundingClientRect(), b = last.getBoundingClientRect();
-    const h = a.height * .5;
-    const d = fxEl('fx-beam', { left: (a.left - 10) + 'px', top: (a.top + a.height / 2 - h / 2) + 'px', width: (b.right - a.left + 20) + 'px', height: h + 'px' });
-    setTimeout(() => d.remove(), 600);
-  }
-
-  // board cleared: confetti rain
-  function confetti(count = 90) {
-    if (reduced) return;
-    const colors = [css('--primary'), css('--accent'), css('--secondary'), '#ffcf4a', '#ff6b8b', '#4ade80'];
-    for (let i = 0; i < count; i++) {
-      const d = fxEl('confetti', { left: Math.random() * 100 + 'vw', background: colors[i % colors.length], animationDelay: Math.random() * .6 + 's' });
-      d.style.setProperty('--dx', (Math.random() * 160 - 80) + 'px');
-      d.style.setProperty('--rot', (Math.random() * 900 - 450) + 'deg');
-      d.style.setProperty('--dur', (1.8 + Math.random() * 1.4) + 's');
-      if (i % 3 === 0) d.style.borderRadius = '50%';
-      setTimeout(() => d.remove(), 3800);
-    }
-  }
-
   function haptic(pattern) { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) { /* unsupported */ } }
 
   document.addEventListener('visibilitychange', () => {
@@ -165,5 +115,5 @@
   window.addEventListener('resize', () => { resize(); reset(); });
   resize();
 
-  window.FX = { setTheme, burst, haptic, line, shock, beam, confetti };
+  window.FX = { setTheme, burst, haptic };
 })();
